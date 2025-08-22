@@ -2,6 +2,8 @@
 
 A first-person 3D maze game built with React, Three.js, and TypeScript. Navigate through procedurally generated mazes with a flashlight, discover doors that lead to other experiences, and enjoy atmospheric lighting.
 
+![public/welcome.png](public/welcome.png)
+
 ## Features
 
 ### 🌟 Core Gameplay
