@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Vector3, Euler, Raycaster } from 'three';
+import { Vector3, Euler, Raycaster, Vector2 } from 'three';
 import { type MazeCell } from '../utils/mazeGenerator';
 
 interface FirstPersonControllerProps {
@@ -20,7 +20,7 @@ export function FirstPersonController({
   onRotationChange,
   onDoorCollision 
 }: FirstPersonControllerProps) {
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
   const moveState = useRef({
     forward: false,
     backward: false,
@@ -159,6 +159,39 @@ export function FirstPersonController({
   };
 
   useFrame((_, delta) => {
+    // Handle keyboard object detection (? key)
+    if ((window as any).pendingDetection) {
+      const detectionInfo = (window as any).pendingDetection;
+      delete (window as any).pendingDetection;
+      
+      // Create raycaster for detection
+      const raycaster = new Raycaster();
+      const mouse = new Vector2(detectionInfo.x, detectionInfo.y);
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Get all objects in the scene
+      if (scene) {
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        
+        if (intersects.length > 0) {
+          const clickedObject = intersects[0].object;
+          const objectName = clickedObject.constructor.name;
+          const objectKey = (clickedObject as any).key || 'no-key';
+          const userData = clickedObject.userData || {};
+          
+          console.log('Object in crosshairs:', {
+            name: objectName,
+            key: objectKey,
+            userData: userData,
+            position: clickedObject.position,
+            distance: intersects[0].distance
+          });
+        } else {
+          console.log('No object in crosshairs');
+        }
+      }
+    }
+
     // Handle keyboard rotation
     const rotationSpeed = 2.0; // radians per second
     if (rotationState.current.rotateLeft || rotationState.current.rotateRight) {

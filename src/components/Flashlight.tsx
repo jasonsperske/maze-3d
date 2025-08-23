@@ -2,7 +2,11 @@ import { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SpotLight, Vector3, Quaternion } from 'three';
 
-export function Flashlight() {
+interface FlashlightProps {
+  intensityMultiplier?: number;
+}
+
+export function Flashlight({ intensityMultiplier = 1 }: FlashlightProps = {}) {
   const spotLightRef = useRef<SpotLight>(null);
   const { camera, gl } = useThree();
   const isPointerLockedRef = useRef(false);
@@ -77,8 +81,8 @@ export function Flashlight() {
   return (
     <spotLight
       ref={spotLightRef}
-      intensity={50}
-      angle={Math.PI / 6}
+      intensity={50 * intensityMultiplier}
+      angle={Math.PI / 6 * Math.max(0.2, Math.min(2, intensityMultiplier))}
       penumbra={0.5}
       distance={30}
       decay={2}

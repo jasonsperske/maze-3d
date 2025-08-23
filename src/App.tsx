@@ -13,6 +13,7 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cameraRotation, setCameraRotation] = useState(new Euler(0, 0, 0, 'YXZ'));
   const [forceReload, setForceReload] = useState(0);
+  const [flashlightIntensity, setFlashlightIntensity] = useState(1);
   
   // Parse seed from URL, hash, or load from storage
   const { seed, initialPosition, initialRotation } = useMemo(() => {
@@ -122,6 +123,30 @@ function App() {
     const hash = btoa(JSON.stringify(state));
     return hash;
   }, [seed, playerPosition, cameraRotation]);
+
+  const letThereBeLight = useCallback((factor: number = 1) => {
+    setFlashlightIntensity(factor);
+    return `Flashlight intensity set to ${factor}x`;
+  }, []);
+
+  // Keyboard handler for object detection
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '?' || event.key === '/' && event.shiftKey) {
+        // Get mouse position for raycasting (center of screen)
+        const x = 0; // Center of screen
+        const y = 0; // Center of screen
+        
+        // Store detection request for the FirstPersonController to handle
+        (window as any).pendingDetection = { x, y };
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const loadState = useCallback((hash?: string) => {
     try {
@@ -334,13 +359,15 @@ function App() {
     (window as any).secretToEverybody = () => printMazeASCII(maze);
     (window as any).saveState = saveState;
     (window as any).loadState = loadState;
+    (window as any).letThereBeLight = letThereBeLight;
 
     return () => {
       delete (window as any).secretToEverybody;
       delete (window as any).saveState;
       delete (window as any).loadState;
+      delete (window as any).letThereBeLight;
     };
-  }, [maze, printMazeASCII, saveState, loadState]);
+  }, [maze, printMazeASCII, saveState, loadState, letThereBeLight]);
 
   return (
     <div style={{ 
@@ -359,7 +386,7 @@ function App() {
         style={{ width: '100%', height: '100%' }}
       >
         <ambientLight intensity={0.05} />
-        <Flashlight />
+        <Flashlight intensityMultiplier={flashlightIntensity} />
         <CeilingLights 
           maze={maze} 
           cellSize={cellSize} 
