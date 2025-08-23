@@ -1,11 +1,12 @@
 import { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { SpotLight, Vector3 } from 'three';
+import { SpotLight, Vector3, Quaternion } from 'three';
 
 export function Flashlight() {
   const spotLightRef = useRef<SpotLight>(null);
   const { camera, gl } = useThree();
   const isPointerLockedRef = useRef(false);
+  const flashlightOffsetRef = useRef(new Vector3(0, 0, -1)); // Offset from camera direction
 
   useEffect(() => {
     const handlePointerLockChange = () => {
@@ -13,26 +14,30 @@ export function Flashlight() {
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!spotLightRef.current || isPointerLockedRef.current) return;
+      if (!spotLightRef.current) return;
 
-      // Convert mouse position to normalized device coordinates
-      const x = (event.clientX / window.innerWidth) * 2 - 1;
-      const y = -(event.clientY / window.innerHeight) * 2 + 1;
+      // Only update flashlight offset when pointer is NOT locked
+      if (!isPointerLockedRef.current) {
+        // Calculate mouse direction relative to camera
+        const x = (event.clientX / window.innerWidth) * 2 - 1;
+        const y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-      // Create a vector from camera to mouse position in world space
-      const mouseVector = new Vector3(x, y, 0.5);
-      mouseVector.unproject(camera);
-      
-      // Calculate direction from camera to mouse position
-      const direction = mouseVector.sub(camera.position).normalize();
-      
-      // Position flashlight at camera position
-      spotLightRef.current.position.copy(camera.position);
-      
-      // Point flashlight in the direction of the mouse
-      const target = camera.position.clone().add(direction.multiplyScalar(10));
-      spotLightRef.current.target.position.copy(target);
-      spotLightRef.current.target.updateMatrixWorld();
+        const mouseVector = new Vector3(x, y, 0.5);
+        mouseVector.unproject(camera);
+        
+        const mouseDirection = mouseVector.sub(camera.position).normalize();
+        
+        // Get camera's forward direction
+        const cameraDirection = new Vector3();
+        camera.getWorldDirection(cameraDirection);
+        
+        // Calculate the offset from camera direction to mouse direction
+        // This maintains the relative aiming when camera rotates
+        const cameraQuaternion = camera.quaternion.clone().invert();
+        const localMouseDirection = mouseDirection.clone().applyQuaternion(cameraQuaternion);
+        flashlightOffsetRef.current.copy(localMouseDirection);
+      }
+      // When pointer is locked, no offset needed (flashlight follows camera exactly)
     };
 
     document.addEventListener('pointerlockchange', handlePointerLockChange);
@@ -47,17 +52,26 @@ export function Flashlight() {
   useFrame(() => {
     if (!spotLightRef.current) return;
     
-    // Always position flashlight at camera position
-    spotLightRef.current.position.copy(camera.position);
+    // Position flashlight slightly below and forward from camera (like being held)
+    const positionOffset = new Vector3(0, -0.3, 0.2);
+    const flashlightPosition = camera.position.clone().add(positionOffset);
+    spotLightRef.current.position.copy(flashlightPosition);
     
-    // When pointer is locked, point flashlight in camera direction
+    let flashlightDirection: Vector3;
+    
     if (isPointerLockedRef.current) {
-      const direction = new Vector3();
-      camera.getWorldDirection(direction);
-      const target = camera.position.clone().add(direction.multiplyScalar(10));
-      spotLightRef.current.target.position.copy(target);
-      spotLightRef.current.target.updateMatrixWorld();
+      // When pointer locked, flashlight follows camera direction exactly
+      flashlightDirection = new Vector3();
+      camera.getWorldDirection(flashlightDirection);
+    } else {
+      // When pointer not locked, apply the stored offset to current camera direction
+      // This makes the flashlight rotate with the camera but maintain mouse aiming
+      flashlightDirection = flashlightOffsetRef.current.clone().applyQuaternion(camera.quaternion);
     }
+    
+    const target = flashlightPosition.clone().add(flashlightDirection.multiplyScalar(10));
+    spotLightRef.current.target.position.copy(target);
+    spotLightRef.current.target.updateMatrixWorld();
   });
 
   return (

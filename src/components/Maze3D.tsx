@@ -5,10 +5,11 @@ interface Maze3DProps {
   maze: MazeCell[][];
   cellSize: number;
   wallHeight: number;
+  seed: number;
   onDoorCollision?: (doorPosition: { x: number; y: number; z: number }) => void;
 }
 
-export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
+export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
   const walls = useMemo(() => {
     const wallElements: JSX.Element[] = [];
     
@@ -30,7 +31,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
       };
     };
     
-    const random = seededRandom(12345); // Use consistent seed for door placement
+    const random = seededRandom(seed); // Use maze seed for door placement
     
     maze.forEach((row, x) => {
       row.forEach((cell, z) => {
@@ -60,7 +61,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
             // Door frame (top)
             wallElements.push(
               <mesh key={`wall-north-top-${x}-${z}`} position={[baseX, wallY + wallHeight * 0.25, wallZ]}>
-                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.5, 0.2]} />
+                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.2, 0.2]} />
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
@@ -68,7 +69,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
             wallElements.push(
               <mesh 
                 key={`door-north-${x}-${z}`} 
-                position={[baseX, wallY - wallHeight * 0.1, wallZ]}
+                position={[baseX, wallHeight * 0.4, wallZ]}
                 userData={{ isDoor: true, position: { x: baseX, y: wallY, z: wallZ } }}
               >
                 <boxGeometry args={[cellSize * 0.2, wallHeight * 0.8, 0.15]} />
@@ -115,7 +116,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
             wallElements.push(
               <mesh 
                 key={`door-south-${x}-${z}`} 
-                position={[baseX, wallY - wallHeight * 0.1, wallZ]}
+                position={[baseX, wallHeight * 0.4, wallZ]}
                 userData={{ isDoor: true, position: { x: baseX, y: wallY, z: wallZ } }}
               >
                 <boxGeometry args={[cellSize * 0.2, wallHeight * 0.8, 0.15]} />
@@ -159,7 +160,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
             wallElements.push(
               <mesh 
                 key={`door-east-${x}-${z}`} 
-                position={[wallX, wallY - wallHeight * 0.1, baseZ]}
+                position={[wallX, wallHeight * 0.4, baseZ]}
                 userData={{ isDoor: true, position: { x: wallX, y: wallY, z: baseZ } }}
               >
                 <boxGeometry args={[0.15, wallHeight * 0.8, cellSize * 0.2]} />
@@ -203,7 +204,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
             wallElements.push(
               <mesh 
                 key={`door-west-${x}-${z}`} 
-                position={[wallX, wallY - wallHeight * 0.1, baseZ]}
+                position={[wallX, wallHeight * 0.4, baseZ]}
                 userData={{ isDoor: true, position: { x: wallX, y: wallY, z: baseZ } }}
               >
                 <boxGeometry args={[0.15, wallHeight * 0.8, cellSize * 0.2]} />
@@ -223,7 +224,7 @@ export function Maze3D({ maze, cellSize, wallHeight }: Maze3DProps) {
     });
     
     return wallElements;
-  }, [maze, cellSize, wallHeight]);
+  }, [maze, cellSize, wallHeight, seed]);
 
   const floor = useMemo(() => {
     const mazeWidth = maze.length * cellSize;

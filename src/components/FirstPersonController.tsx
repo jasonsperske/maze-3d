@@ -8,6 +8,7 @@ interface FirstPersonControllerProps {
   cellSize: number;
   position: Vector3;
   onPositionChange: (position: Vector3) => void;
+  onRotationChange?: (rotation: Euler) => void;
   onDoorCollision?: (doorPosition: { x: number; y: number; z: number }) => void;
 }
 
@@ -16,6 +17,7 @@ export function FirstPersonController({
   cellSize, 
   position, 
   onPositionChange,
+  onRotationChange,
   onDoorCollision 
 }: FirstPersonControllerProps) {
   const { camera } = useThree();
@@ -28,6 +30,10 @@ export function FirstPersonController({
   const mouseState = useRef({
     isPointerLocked: false,
     sensitivity: 0.002,
+  });
+  const rotationState = useRef({
+    rotateLeft: false,
+    rotateRight: false,
   });
   const euler = useRef(new Euler(0, 0, 0, 'YXZ'));
   
@@ -46,12 +52,16 @@ export function FirstPersonController({
           moveState.current.backward = true;
           break;
         case 'KeyA':
-        case 'ArrowLeft':
           moveState.current.left = true;
           break;
         case 'KeyD':
-        case 'ArrowRight':
           moveState.current.right = true;
+          break;
+        case 'ArrowLeft':
+          rotationState.current.rotateLeft = true;
+          break;
+        case 'ArrowRight':
+          rotationState.current.rotateRight = true;
           break;
       }
     };
@@ -67,12 +77,16 @@ export function FirstPersonController({
           moveState.current.backward = false;
           break;
         case 'KeyA':
-        case 'ArrowLeft':
           moveState.current.left = false;
           break;
         case 'KeyD':
-        case 'ArrowRight':
           moveState.current.right = false;
+          break;
+        case 'ArrowLeft':
+          rotationState.current.rotateLeft = false;
+          break;
+        case 'ArrowRight':
+          rotationState.current.rotateRight = false;
           break;
       }
     };
@@ -85,6 +99,10 @@ export function FirstPersonController({
       euler.current.x -= event.movementY * mouseState.current.sensitivity;
       euler.current.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.current.x));
       camera.quaternion.setFromEuler(euler.current);
+      
+      if (onRotationChange) {
+        onRotationChange(euler.current.clone());
+      }
     };
 
     const handlePointerLockChange = () => {
@@ -141,6 +159,23 @@ export function FirstPersonController({
   };
 
   useFrame((_, delta) => {
+    // Handle keyboard rotation
+    const rotationSpeed = 2.0; // radians per second
+    if (rotationState.current.rotateLeft || rotationState.current.rotateRight) {
+      euler.current.setFromQuaternion(camera.quaternion);
+      if (rotationState.current.rotateLeft) {
+        euler.current.y += rotationSpeed * delta;
+      }
+      if (rotationState.current.rotateRight) {
+        euler.current.y -= rotationSpeed * delta;
+      }
+      camera.quaternion.setFromEuler(euler.current);
+      
+      if (onRotationChange) {
+        onRotationChange(euler.current.clone());
+      }
+    }
+
     const direction = new Vector3();
     const right = new Vector3();
     

@@ -5,15 +5,36 @@ interface CeilingLightsProps {
   maze: MazeCell[][];
   cellSize: number;
   wallHeight: number;
+  seed: number;
 }
 
-export function CeilingLights({ maze, cellSize, wallHeight }: CeilingLightsProps) {
+export function CeilingLights({ maze, cellSize, wallHeight, seed }: CeilingLightsProps) {
   const lights = useMemo(() => {
     const lightElements: JSX.Element[] = [];
     
+    // Seeded random for consistent light placement
+    const seededRandom = (seed: number): () => number => {
+      let m_z = 987654321;
+      let m_w = 123456789;
+      const mask = 0xffffffff;
+      
+      m_z = (36969 * (seed & 65535) + (seed >> 16)) & mask;
+      m_w = (18000 * (seed & 65535) + (seed >> 16)) & mask;
+      
+      return function() {
+        m_z = (36969 * (m_z & 65535) + (m_z >> 16)) & mask;
+        m_w = (18000 * (m_w & 65535) + (m_w >> 16)) & mask;
+        let result = ((m_z << 16) + (m_w & 65535)) >>> 0;
+        result /= 4294967296;
+        return result;
+      };
+    };
+    
+    const random = seededRandom(seed + 1000); // Use maze seed + offset for lights
+    
     // Add lights sparsely - roughly every 8-12 cells
-    for (let x = 0; x < maze.length; x += 8 + Math.floor(Math.random() * 5)) {
-      for (let z = 0; z < maze[0].length; z += 8 + Math.floor(Math.random() * 5)) {
+    for (let x = 0; x < maze.length; x += 8 + Math.floor(random() * 5)) {
+      for (let z = 0; z < maze[0].length; z += 8 + Math.floor(random() * 5)) {
         // Skip if this position has walls (shouldn't happen in open areas but safety check)
         if (x >= maze.length || z >= maze[0].length) continue;
         
@@ -60,7 +81,7 @@ export function CeilingLights({ maze, cellSize, wallHeight }: CeilingLightsProps
     }
     
     return lightElements;
-  }, [maze, cellSize, wallHeight]);
+  }, [maze, cellSize, wallHeight, seed]);
 
   return <>{lights}</>;
 }
