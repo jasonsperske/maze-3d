@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { Vector3, Euler } from 'three';
 import { MazeGenerator } from './utils/mazeGenerator';
 import { Maze3D } from './components/Maze3D';
@@ -17,7 +17,7 @@ function App() {
   // Parse seed from URL, hash, or load from storage
   const { seed, initialPosition, initialRotation } = useMemo(() => {
     // First check hash for state
-    const hash = window.location.hash.slice(1);
+    const hash = decodeURIComponent(window.location.hash.slice(1));
     if (hash) {
       try {
         const state = JSON.parse(atob(hash));
@@ -334,7 +334,7 @@ function App() {
     (window as any).secretToEverybody = () => printMazeASCII(maze);
     (window as any).saveState = saveState;
     (window as any).loadState = loadState;
-    
+
     return () => {
       delete (window as any).secretToEverybody;
       delete (window as any).saveState;
