@@ -7,14 +7,12 @@ import { FirstPersonController } from "./components/FirstPersonController";
 import { Flashlight } from "./components/Flashlight";
 import { CeilingLights } from "./components/CeilingLights";
 import {
-  hashCoordinates,
-  callDoorAPI,
-  storeMazeData,
   loadMazeData,
   clearMazeData,
-  type StoredMazeData,
 } from "./utils/doorUtils";
 import { type MazeCell } from "./utils/mazeGenerator";
+import { logDoorCollision } from "./handlers/logDoorCollision";
+import { type DoorCollisionContext } from "./handlers/types";
 
 function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -241,37 +239,19 @@ function App() {
   }, []);
 
   const handleDoorCollision = useCallback(
-    async (doorPosition: { x: number; y: number; z: number }) => {
-      try {
-        // Store current state
-        const mazeData: StoredMazeData = {
-          seed,
-          position: {
-            x: playerPosition.x,
-            y: playerPosition.y,
-            z: playerPosition.z,
-          },
-          rotation: { x: 0, y: 0, z: 0 }, // TODO: Get actual camera rotation
-        };
-        storeMazeData(mazeData);
-
-        // Generate door hash and call API
-        const doorHash = hashCoordinates(
-          doorPosition.x,
-          doorPosition.y,
-          doorPosition.z
-        );
-        const currentUrl = window.location.href;
-        const redirectUrl = await callDoorAPI(currentUrl, seed, doorHash);
-
-        // Redirect to new URL
-        window.location.href = redirectUrl;
-      } catch (error) {
-        console.error("Door collision error:", error);
-        // Could show a user-friendly error message here
-      }
+    (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => {
+      const context: DoorCollisionContext = {
+        seed,
+        playerPosition: {
+          x: playerPosition.x,
+          y: playerPosition.y,
+          z: playerPosition.z,
+        },
+        cameraRotationY: cameraRotation.y,
+      };
+      logDoorCollision(doorPosition, wallNormalAngle, context);
     },
-    [seed, playerPosition]
+    [seed, playerPosition, cameraRotation]
   );
 
   const toggleFullscreen = useCallback(() => {

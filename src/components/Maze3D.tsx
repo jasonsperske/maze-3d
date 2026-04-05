@@ -6,7 +6,7 @@ interface Maze3DProps {
   cellSize: number;
   wallHeight: number;
   seed: number;
-  onDoorCollision?: (doorPosition: { x: number; y: number; z: number }) => void;
+  onDoorCollision?: (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => void;
 }
 
 export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
@@ -58,21 +58,21 @@ export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
-            // Door frame (top)
+            // Door frame (top) — sits above the door opening
             wallElements.push(
-              <mesh key={`wall-north-top-${x}-${z}`} position={[baseX, wallY + wallHeight * 0.5, wallZ]}>
+              <mesh key={`wall-north-top-${x}-${z}`} position={[baseX, wallHeight * 0.9, wallZ]}>
                 <boxGeometry args={[cellSize * 0.2, wallHeight * 0.2, 0.2]} />
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
-            // Door itself
+            // Door itself — height 80% of wall so top frame clears it
             wallElements.push(
-              <mesh 
-                key={`door-north-${x}-${z}`} 
-                position={[baseX, wallHeight * 0.8, wallZ]}
+              <mesh
+                key={`door-north-${x}-${z}`}
+                position={[baseX, wallHeight * 0.4, wallZ]}
                 userData={{ isDoor: true, position: { x: baseX, y: wallY, z: wallZ } }}
               >
-                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.95, 0.15]} />
+                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.8, 0.15]} />
                 <meshStandardMaterial color="#8B4513" />
               </mesh>
             );
@@ -108,18 +108,18 @@ export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
               </mesh>
             );
             wallElements.push(
-              <mesh key={`wall-south-top-${x}-${z}`} position={[baseX, wallY + wallHeight * 0.25, wallZ]}>
-                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.5, 0.2]} />
+              <mesh key={`wall-south-top-${x}-${z}`} position={[baseX, wallHeight * 0.9, wallZ]}>
+                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.2, 0.2]} />
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
             wallElements.push(
-              <mesh 
-                key={`door-south-${x}-${z}`} 
-                position={[baseX, wallHeight * 0.475, wallZ]}
+              <mesh
+                key={`door-south-${x}-${z}`}
+                position={[baseX, wallHeight * 0.4, wallZ]}
                 userData={{ isDoor: true, position: { x: baseX, y: wallY, z: wallZ } }}
               >
-                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.95, 0.15]} />
+                <boxGeometry args={[cellSize * 0.2, wallHeight * 0.8, 0.15]} />
                 <meshStandardMaterial color="#8B4513" />
               </mesh>
             );
@@ -152,18 +152,18 @@ export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
               </mesh>
             );
             wallElements.push(
-              <mesh key={`wall-east-top-${x}-${z}`} position={[wallX, wallY + wallHeight * 0.25, baseZ]}>
-                <boxGeometry args={[0.2, wallHeight * 0.5, cellSize * 0.2]} />
+              <mesh key={`wall-east-top-${x}-${z}`} position={[wallX, wallHeight * 0.9, baseZ]}>
+                <boxGeometry args={[0.2, wallHeight * 0.2, cellSize * 0.2]} />
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
             wallElements.push(
-              <mesh 
-                key={`door-east-${x}-${z}`} 
-                position={[wallX, wallHeight * 0.475, baseZ]}
+              <mesh
+                key={`door-east-${x}-${z}`}
+                position={[wallX, wallHeight * 0.4, baseZ]}
                 userData={{ isDoor: true, position: { x: wallX, y: wallY, z: baseZ } }}
               >
-                <boxGeometry args={[0.15, wallHeight * 0.95, cellSize * 0.2]} />
+                <boxGeometry args={[0.15, wallHeight * 0.8, cellSize * 0.2]} />
                 <meshStandardMaterial color="#8B4513" />
               </mesh>
             );
@@ -196,18 +196,18 @@ export function Maze3D({ maze, cellSize, wallHeight, seed }: Maze3DProps) {
               </mesh>
             );
             wallElements.push(
-              <mesh key={`wall-west-top-${x}-${z}`} position={[wallX, wallY + wallHeight * 0.25, baseZ]}>
-                <boxGeometry args={[0.2, wallHeight * 0.5, cellSize * 0.2]} />
+              <mesh key={`wall-west-top-${x}-${z}`} position={[wallX, wallHeight * 0.9, baseZ]}>
+                <boxGeometry args={[0.2, wallHeight * 0.2, cellSize * 0.2]} />
                 <meshStandardMaterial color="#666666" />
               </mesh>
             );
             wallElements.push(
-              <mesh 
-                key={`door-west-${x}-${z}`} 
-                position={[wallX, wallHeight * 0.475, baseZ]}
+              <mesh
+                key={`door-west-${x}-${z}`}
+                position={[wallX, wallHeight * 0.4, baseZ]}
                 userData={{ isDoor: true, position: { x: wallX, y: wallY, z: baseZ } }}
               >
-                <boxGeometry args={[0.15, wallHeight * 0.95, cellSize * 0.2]} />
+                <boxGeometry args={[0.15, wallHeight * 0.8, cellSize * 0.2]} />
                 <meshStandardMaterial color="#8B4513" />
               </mesh>
             );

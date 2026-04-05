@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3, Euler, Raycaster, Vector2 } from "three";
+import { Vector3, Euler, Raycaster, Vector2, Box3 } from "three";
 import { type MazeCell } from "../utils/mazeGenerator";
 
 interface FirstPersonControllerProps {
@@ -9,7 +9,7 @@ interface FirstPersonControllerProps {
   position: Vector3;
   onPositionChange: (position: Vector3) => void;
   onRotationChange?: (rotation: Euler) => void;
-  onDoorCollision?: (doorPosition: { x: number; y: number; z: number }) => void;
+  onDoorCollision?: (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => void;
 }
 
 export function FirstPersonController({
@@ -44,6 +44,7 @@ export function FirstPersonController({
 
   const moveSpeed = 5;
   const currentPosition = useRef(position.clone());
+  const lastDoorUuid = useRef<string | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -287,28 +288,54 @@ export function FirstPersonController({
     if (velocity.length() > 0) {
       velocity.normalize().multiplyScalar(moveSpeed * delta);
 
-      // Check for door collision before moving
-      const raycaster = new Raycaster();
-      const cameraDirection = new Vector3();
-      camera.getWorldDirection(cameraDirection);
-      raycaster.set(camera.position, cameraDirection);
+      // Check for door collision by proximity to each door's wall plane.
+      // Uses the scene from useThree() — avoids relying on camera.parent which
+      // may be null in R3F. Checks perpendicular distance to the wall plane and
+      // lateral distance within the corridor so off-center players still trigger.
+      const TRIGGER_DEPTH = 1.0;
+      let hitDoorUuid: string | null = null;
 
-      // Get all objects in the scene
-      const scene = camera.parent;
-      if (scene) {
-        const intersects = raycaster.intersectObjects(scene.children, true);
+      scene.traverse((obj) => {
+        if (hitDoorUuid || !obj.userData?.isDoor) return;
 
-        for (const intersect of intersects) {
-          if (intersect.distance < 1.0 && intersect.object.userData?.isDoor) {
-            // Found a door collision
-            const doorPos = intersect.object.userData.position;
-            if (onDoorCollision) {
-              onDoorCollision(doorPos);
-            }
-            return; // Stop movement processing
+        const doorWorldPos = new Vector3();
+        obj.getWorldPosition(doorWorldPos);
+
+        const size = new Box3().setFromObject(obj).getSize(new Vector3());
+        const isEastWestDoor = size.x < size.z;
+
+        // perpDist: how close the player is to the wall plane
+        // lateralDist: how far off-center the player is along the wall
+        const perpDist = isEastWestDoor
+          ? Math.abs(camera.position.x - doorWorldPos.x)
+          : Math.abs(camera.position.z - doorWorldPos.z);
+        const lateralDist = isEastWestDoor
+          ? Math.abs(camera.position.z - doorWorldPos.z)
+          : Math.abs(camera.position.x - doorWorldPos.x);
+
+        // Only trigger when moving toward the door, not away from it
+        const movingToward = isEastWestDoor
+          ? velocity.x * (doorWorldPos.x - camera.position.x) > 0
+          : velocity.z * (doorWorldPos.z - camera.position.z) > 0;
+
+        if (perpDist < TRIGGER_DEPTH && lateralDist < cellSize / 2 && movingToward) {
+          hitDoorUuid = obj.uuid;
+
+          if (onDoorCollision && lastDoorUuid.current !== obj.uuid) {
+            lastDoorUuid.current = obj.uuid;
+            const wallNormalAngle = isEastWestDoor
+              ? (velocity.x < 0 ? Math.PI / 2 : -Math.PI / 2)
+              : (velocity.z < 0 ? 0 : Math.PI);
+            onDoorCollision(obj.userData.position, wallNormalAngle);
           }
         }
+      });
+
+      if (hitDoorUuid === null) {
+        lastDoorUuid.current = null; // Reset when not near any door
       }
+
+      if (hitDoorUuid) return; // Stop movement while in door volume
     }
 
     const newPosition = currentPosition.current.clone().add(velocity);
