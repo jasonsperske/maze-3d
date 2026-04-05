@@ -1,6 +1,16 @@
 # 3D Maze Explorer
 
-A first-person 3D maze game built with React, Three.js, and TypeScript. Navigate through procedurally generated mazes with a flashlight, discover doors that lead to other experiences, and enjoy atmospheric lighting.
+I found this.
+
+At first it was just dark corridors — grey walls, a flashlight, nothing else. I didn't know what I was looking at. I wandered around for a while, mapped it a little, started to get a feel for the shape of the place.
+
+Then I found a door.
+
+I walked through it and ended up somewhere else. Different walls, different light. I found another door after that. I'm not sure where this is going but I keep finding new rooms, new configurations, things that don't quite make sense together. I'm documenting what I find here as I go.
+
+I'll keep investigating.
+
+---
 
 ![public/welcome.png](public/welcome.png)
 
