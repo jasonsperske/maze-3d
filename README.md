@@ -42,6 +42,57 @@ npm run dev
 - Click to capture mouse, then use WASD to move and mouse to look around
 - Walk into doors to trigger transitions (currently mocked for development)
 
+## Defining Levels
+
+Custom levels let you change the look and feel of a maze without touching code. Each level is a JSON file that overrides any subset of the default settings.
+
+### Creating a level file
+
+Add a file at `public/static/level/<name>.json`. Any fields you omit fall back to the defaults shown in the table below.
+
+```json
+{
+  "wallColor": "#8B4513",
+  "floorColor": "#2c1810",
+  "ceilingColor": "#1a0f08",
+  "doorFrequency": 0.15,
+  "ambientLight": 0.02,
+  "lightSpacing": 12,
+  "halfHeightPartitions": true,
+  "halfHeightColor": "#6B3410",
+  "halfHeightFrequency": 0.25,
+  "widerRooms": false,
+  "widerRoomFrequency": 0.0
+}
+```
+
+### Playing a level
+
+Navigate to `/level/<name>` — for example `/level/1` loads `public/static/level/1.json`. Seed parameters and hash-based state still work the same way: `/level/1?seed=42` or with a position hash.
+
+### Config reference
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `wallColor` | CSS color | `#666666` | Color of full-height walls |
+| `floorColor` | CSS color | `#444444` | Floor color |
+| `ceilingColor` | CSS color | `#222222` | Ceiling color |
+| `doorFrequency` | 0–1 | `0.1` | Probability that any given wall spawns a door |
+| `ambientLight` | number | `0.05` | Three.js ambient light intensity — `0` is pitch black, `1` is fully lit |
+| `lightSpacing` | integer | `8` | Base cell stride between ceiling lights; higher means fewer, dimmer levels |
+| `halfHeightPartitions` | boolean | `false` | When true, some walls are rendered at half the normal height — the camera can see over them but the player cannot walk through |
+| `halfHeightColor` | CSS color | `#555555` | Color of half-height partition walls |
+| `halfHeightFrequency` | 0–1 | `0.3` | Fraction of eligible (non-door) walls that become half-height partitions |
+| `widerRooms` | boolean | `false` | When true, some internal walls are removed after maze generation to create larger open areas |
+| `widerRoomFrequency` | 0–1 | `0.2` | Probability that each internal wall is removed when `widerRooms` is enabled |
+
+### Bundled examples
+
+| Level | URL | Description |
+|---|---|---|
+| `1` | `/level/1` | Backrooms — sickly yellow walls, bright fluorescent lighting, frequent ceiling lights, open areas via `widerRooms` |
+| `2` | `/level/2` | Dark dungeon — dim ambient light, brown stone walls, half-height partition barriers |
+
 ## Architecture
 
 ### Key Components

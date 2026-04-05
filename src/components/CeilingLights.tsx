@@ -6,6 +6,7 @@ interface CeilingLightsProps {
   cellSize: number;
   wallHeight: number;
   seed: number;
+  lightSpacing: number;
 }
 
 export function CeilingLights({
@@ -13,6 +14,7 @@ export function CeilingLights({
   cellSize,
   wallHeight,
   seed,
+  lightSpacing,
 }: CeilingLightsProps) {
   const lights = useMemo(() => {
     const lightElements: JSX.Element[] = [];
@@ -37,9 +39,8 @@ export function CeilingLights({
 
     const random = seededRandom(seed); // Use same seed as walls and doors
 
-    // Add lights sparsely - roughly every 8-12 cells
-    for (let x = 0; x < maze.length; x += 8 + Math.floor(random() * 5)) {
-      for (let z = 0; z < maze[0].length; z += 8 + Math.floor(random() * 5)) {
+    for (let x = 0; x < maze.length; x += lightSpacing + Math.floor(random() * 5)) {
+      for (let z = 0; z < maze[0].length; z += lightSpacing + Math.floor(random() * 5)) {
         // Skip if this position has walls (shouldn't happen in open areas but safety check)
         if (x >= maze.length || z >= maze[0].length) continue;
 
@@ -86,7 +87,7 @@ export function CeilingLights({
     }
 
     return lightElements;
-  }, [maze, cellSize, wallHeight, seed]);
+  }, [maze, cellSize, wallHeight, seed, lightSpacing]);
 
   return <>{lights}</>;
 }
