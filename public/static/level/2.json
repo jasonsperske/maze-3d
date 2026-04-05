@@ -9,5 +9,6 @@
   "halfHeightColor": "#6B3410",
   "halfHeightFrequency": 0.25,
   "widerRooms": false,
-  "widerRoomFrequency": 0.0
+  "widerRoomFrequency": 0.0,
+  "shader": "vhs"
 }

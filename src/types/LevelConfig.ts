@@ -19,6 +19,9 @@ export interface LevelConfig {
   // Wider rooms: randomly remove internal walls post-generation so some areas open up
   widerRooms: boolean;
   widerRoomFrequency: number; // 0–1 probability that each internal wall is removed
+
+  // Post-processing shader applied over the whole canvas, e.g. "vhs"
+  shader?: string;
 }
 
 export const DEFAULT_LEVEL_CONFIG: LevelConfig = {

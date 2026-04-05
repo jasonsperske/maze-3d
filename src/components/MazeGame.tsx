@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Vector3, Euler } from "three";
 import { MazeGenerator, type MazeCell } from "../utils/mazeGenerator";
@@ -10,6 +10,7 @@ import { loadMazeData, clearMazeData } from "../utils/doorUtils";
 import { logDoorCollision } from "../handlers/logDoorCollision";
 import { type DoorCollisionContext } from "../handlers/types";
 import { type LevelConfig } from "../types/LevelConfig";
+import { getShaderComponent } from "../shaders";
 
 interface MazeGameProps {
   config: LevelConfig;
@@ -236,6 +237,38 @@ export function MazeGame({ config }: MazeGameProps) {
   const cellSize = 4;
   const wallHeight = 3;
 
+  // Mirror CeilingLights' deterministic placement to know where lights are in world space.
+  const lightPositions = useMemo(() => {
+    const positions: Array<{ x: number; y: number; z: number }> = [];
+    const random = makeSeededRandom(seed);
+    for (let x = 0; x < maze.length; x += config.lightSpacing + Math.floor(random() * 5)) {
+      for (let z = 0; z < maze[0].length; z += config.lightSpacing + Math.floor(random() * 5)) {
+        if (x >= maze.length || z >= maze[0].length) continue;
+        if (Object.values(maze[x][z].walls).filter(Boolean).length >= 3) continue;
+        positions.push({
+          x: x * cellSize + cellSize / 2,
+          y: wallHeight - 0.3,
+          z: z * cellSize + cellSize / 2,
+        });
+      }
+    }
+    return positions;
+  }, [maze, seed, config.lightSpacing, cellSize, wallHeight]);
+
+  // Exponential proximity to nearest light — updated every render since playerPosition is state.
+  const proximityRef = useRef(0);
+  proximityRef.current = useMemo(() => {
+    let minDistSq = Infinity;
+    for (const lp of lightPositions) {
+      const dx = playerPosition.x - lp.x;
+      const dy = playerPosition.y - lp.y;
+      const dz = playerPosition.z - lp.z;
+      const dSq = dx * dx + dy * dy + dz * dz;
+      if (dSq < minDistSq) minDistSq = dSq;
+    }
+    return lightPositions.length > 0 ? Math.exp(-Math.sqrt(minDistSq) * 0.18) : 0;
+  }, [playerPosition, lightPositions]);
+
   const printMazeASCII = useCallback(
     (maze: MazeCell[][]) => {
       let output = "";
@@ -375,6 +408,11 @@ export function MazeGame({ config }: MazeGameProps) {
         }}
         style={{ width: "100%", height: "100%" }}
       >
+        {(() => {
+          if (!config.shader) return null;
+          const ShaderEffect = getShaderComponent(config.shader);
+          return ShaderEffect ? <ShaderEffect proximityRef={proximityRef} /> : null;
+        })()}
         <ambientLight intensity={config.ambientLight} />
         <Flashlight intensityMultiplier={flashlightIntensity} />
         <CeilingLights
