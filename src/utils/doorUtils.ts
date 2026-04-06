@@ -12,7 +12,7 @@ export function hashCoordinates(x: number, y: number, z: number): string {
 
 // Configuration
 const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_DOOR_API === 'true';
-const DOOR_API_URL = import.meta.env.VITE_DOOR_API_URL || 'https://backroo.ms/door';
+const DOOR_API_URL = import.meta.env.VITE_DOOR_API_URL || 'https://backrooms.zone/door';
 
 // Mock API implementation
 async function mockDoorAPI(

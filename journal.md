@@ -24,7 +24,7 @@ the second commit is called "audidted deps" — typo, "audited" probably — and
 
 so between november and april, nothing. or nothing committed. someone was running it locally maybe. or no one was running it at all.
 
-I keep trying to figure out what this is *for*. there's a door system. the doors are supposed to call an external API and redirect you somewhere. the endpoint is `backroo.ms`. I looked it up. I'm not going to write down what I found.
+I keep trying to figure out what this is *for*. there's a door system. the doors are supposed to call an external API and redirect you somewhere. the endpoint is `backrooms.zone`. I looked it up. I'm not going to write down what I found.
 
 ---
 
@@ -33,8 +33,6 @@ I keep trying to figure out what this is *for*. there's a door system. the doors
 the third commit: **"fixed doors"**
 
 this one is more interesting. they changed how the doors work — moved the collision logic into separate handler files. one that logs, one that actually redirects. the door detection was broken before, apparently. you could walk up to a door and nothing would happen.
-
-there are two handlers now. `logDoorCollision` and `apiDoorCollision`. the log one just prints to the console. the api one calls `backroo.ms` and follows wherever it
 
 hold on.
 

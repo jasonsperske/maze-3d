@@ -208,7 +208,7 @@ VITE_USE_MOCK_DOOR_API=true
 **Real API (Production):**
 ```bash
 VITE_USE_MOCK_DOOR_API=false
-VITE_DOOR_API_URL=https://backroo.ms/door
+VITE_DOOR_API_URL=https://backrooms.zone/door
 ```
 - Makes actual HTTP requests to your endpoint
 - Handles real redirections to external sites
