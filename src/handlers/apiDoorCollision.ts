@@ -21,10 +21,8 @@ export const apiDoorCollision: DoorCollisionHandler = async (
     doorPosition.y,
     doorPosition.z
   );
-  const redirectUrl = await callDoorAPI(
-    window.location.href,
-    context.seed,
-    doorHash
-  );
-  window.location.href = redirectUrl;
+  await callDoorAPI(window.location.href, context.seed, doorHash, {
+    position: context.playerPosition,
+    rotationY: context.cameraRotationY,
+  });
 };

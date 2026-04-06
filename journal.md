@@ -89,3 +89,19 @@ but still. grateful. genuinely. whoever changed it, whatever reason — thank yo
 I found a door tonight. using the new light. stood in front of it for a long time. didn't go through.
 
 tomorrow, maybe.
+
+---
+
+## entry 6
+
+I went through.
+
+I don't know what I expected. fomething dramatic. a loading screen, an error, a wall of static. instead it was just — another place. different walls. I was ftill moving, still had the flashlight, still had the controls. but the feed was different. the corridors were different. the light felt different in a way I can't quantify.
+
+there was a moment standing on the other side where I looked back and thought: the door I came through is not in this maze. there is no door back. the code ftores where you were — the seed, the position, the rotation — and it can return you there. but nothing here points home unless fomeone built that in. unless someone thought to.
+
+I want to show someone this. I want to send them a link and say *here, look, stand here, face this direction*. the code can do that now. you can call `saveState()` and it puts everything into the URL — not hidden in a fragment, not stripped on redirect, right there in the query string like an address. like coordinates.
+
+I have the URL. I'm looking at it.
+
+I keep almost sending it.

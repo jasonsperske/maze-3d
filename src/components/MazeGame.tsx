@@ -6,8 +6,8 @@ import { Maze3D } from "./Maze3D";
 import { FirstPersonController } from "./FirstPersonController";
 import { Flashlight } from "./Flashlight";
 import { CeilingLights } from "./CeilingLights";
-import { loadMazeData, clearMazeData } from "../utils/doorUtils";
-import { logDoorCollision } from "../handlers/logDoorCollision";
+import { loadMazeData, clearMazeData, storeMazeData } from "../utils/doorUtils";
+import { apiDoorCollision } from "../handlers/apiDoorCollision";
 import { type DoorCollisionContext } from "../handlers/types";
 import { type LevelConfig } from "../types/LevelConfig";
 import { getShaderComponent } from "../shaders";
@@ -37,10 +37,12 @@ export function MazeGame({ config }: MazeGameProps) {
   const [flashlightIntensity, setFlashlightIntensity] = useState(1);
 
   const { seed, initialPosition, initialRotation } = useMemo(() => {
-    const hash = decodeURIComponent(window.location.hash.slice(1));
-    if (hash) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParam = urlParams.get("hash");
+
+    if (hashParam) {
       try {
-        const state = JSON.parse(atob(hash));
+        const state = JSON.parse(atob(hashParam));
         if (
           state.seed &&
           typeof state.seed === "number" &&
@@ -53,7 +55,11 @@ export function MazeGame({ config }: MazeGameProps) {
           typeof state.rotation.y === "number" &&
           typeof state.rotation.z === "number"
         ) {
-          clearMazeData();
+          storeMazeData({
+            seed: state.seed,
+            position: state.position,
+            rotation: state.rotation,
+          });
           return {
             seed: state.seed,
             initialPosition: new Vector3(
@@ -68,17 +74,13 @@ export function MazeGame({ config }: MazeGameProps) {
               "YXZ"
             ),
           };
-        } else {
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
       } catch {
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        // invalid hash param — ignore and fall through
       }
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
     const seedParam = urlParams.get("seed");
-
     if (seedParam) {
       clearMazeData();
       const seedValue = parseInt(seedParam, 10);
@@ -165,7 +167,8 @@ export function MazeGame({ config }: MazeGameProps) {
       position: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
       rotation: { x: cameraRotation.x, y: cameraRotation.y, z: cameraRotation.z },
     };
-    return btoa(JSON.stringify(state));
+    const url = window.location.origin + window.location.pathname + "?hash=" + btoa(JSON.stringify(state));
+    window.location.href = url;
   }, [seed, playerPosition, cameraRotation]);
 
   const letThereBeLight = useCallback((factor: number = 1) => {
@@ -185,7 +188,7 @@ export function MazeGame({ config }: MazeGameProps) {
 
   const loadState = useCallback((hash?: string) => {
     try {
-      const hashToLoad = hash || window.location.hash.slice(1);
+      const hashToLoad = hash || new URLSearchParams(window.location.search).get("hash") || "";
       if (!hashToLoad) return false;
       const state = JSON.parse(atob(hashToLoad));
       if (
@@ -202,11 +205,9 @@ export function MazeGame({ config }: MazeGameProps) {
         setForceReload((prev) => prev + 1);
         return true;
       }
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setForceReload((prev) => prev + 1);
       return false;
     } catch {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setForceReload((prev) => prev + 1);
       return false;
     }
@@ -219,7 +220,7 @@ export function MazeGame({ config }: MazeGameProps) {
         playerPosition: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
         cameraRotationY: cameraRotation.y,
       };
-      logDoorCollision(doorPosition, wallNormalAngle, context);
+      apiDoorCollision(doorPosition, wallNormalAngle, context);
     },
     [seed, playerPosition, cameraRotation]
   );
@@ -370,12 +371,6 @@ export function MazeGame({ config }: MazeGameProps) {
     },
     [playerPosition, cellSize, seed, cameraRotation.y, config.doorFrequency, config.lightSpacing]
   );
-
-  useEffect(() => {
-    const handleHashChange = () => setForceReload((prev) => prev + 1);
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
 
   useEffect(() => {
     (window as any).secretToEverybody = () => printMazeASCII(maze);

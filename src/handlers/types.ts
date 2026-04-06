@@ -19,7 +19,7 @@ export function buildReturnUrl(context: DoorCollisionContext): string {
   return (
     window.location.origin +
     window.location.pathname +
-    "#" +
+    "?hash=" +
     btoa(JSON.stringify(state))
   );
 }

@@ -33,49 +33,39 @@ async function mockDoorAPI(
   return baseUrl;
 }
 
-// Real API implementation
-async function realDoorAPI(
+export interface PlayerContext {
+  position: { x: number; y: number; z: number };
+  rotationY: number;
+}
+
+// Real API implementation — navigates directly (server issues redirect)
+function realDoorAPI(
   currentUrl: string,
   mazeSeed: number,
-  doorHash: string
-): Promise<string> {
-  console.log('Real Door API called:', { 
-    url: DOOR_API_URL, 
-    currentUrl, 
-    mazeSeed, 
-    doorHash 
+  doorHash: string,
+  player: PlayerContext
+): void {
+  const params = new URLSearchParams({
+    source: currentUrl,
+    x: String(player.position.x),
+    y: String(player.position.y),
+    z: String(player.position.z),
+    rotation: String(player.rotationY),
   });
-
-  const response = await fetch(DOOR_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: currentUrl,
-      maze_seed: mazeSeed,
-      door_hash: doorHash
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Door API error: ${response.status} - ${response.statusText}`);
-  }
-  
-  const data = await response.json();
-  return data.redirect_url || data.url;
+  window.location.href = `${DOOR_API_URL}?${params.toString()}`;
 }
 
 // Main API call function - uses mock or real based on configuration
 export async function callDoorAPI(
-  currentUrl: string, 
-  mazeSeed: number, 
-  doorHash: string
-): Promise<string> {
+  currentUrl: string,
+  mazeSeed: number,
+  doorHash: string,
+  player: PlayerContext
+): Promise<void> {
   if (USE_MOCK_API) {
     return mockDoorAPI(currentUrl, mazeSeed, doorHash);
   } else {
-    return realDoorAPI(currentUrl, mazeSeed, doorHash);
+    realDoorAPI(currentUrl, mazeSeed, doorHash, player);
   }
 }
 
