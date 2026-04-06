@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { SpotLight, Vector3, Quaternion } from 'three';
+import { SpotLight, Vector3 } from 'three';
 
 interface FlashlightProps {
   intensityMultiplier?: number;

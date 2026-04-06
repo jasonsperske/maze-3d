@@ -41,8 +41,6 @@ export interface PlayerContext {
 // Real API implementation — navigates directly (server issues redirect)
 function realDoorAPI(
   currentUrl: string,
-  mazeSeed: number,
-  doorHash: string,
   player: PlayerContext
 ): void {
   const params = new URLSearchParams({
@@ -63,9 +61,9 @@ export async function callDoorAPI(
   player: PlayerContext
 ): Promise<void> {
   if (USE_MOCK_API) {
-    return mockDoorAPI(currentUrl, mazeSeed, doorHash);
+    mockDoorAPI(currentUrl, mazeSeed, doorHash);
   } else {
-    realDoorAPI(currentUrl, mazeSeed, doorHash, player);
+    realDoorAPI(currentUrl, player);
   }
 }
 

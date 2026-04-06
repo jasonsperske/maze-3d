@@ -1,7 +1,7 @@
 import { type DoorCollisionHandler, buildReturnUrl } from "./types";
 
 export const logDoorCollision: DoorCollisionHandler = (
-  doorPosition,
+  _doorPosition,
   wallNormalAngle,
   context
 ) => {

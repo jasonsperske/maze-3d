@@ -7,7 +7,7 @@ import { type DoorCollisionHandler } from "./types";
 
 export const apiDoorCollision: DoorCollisionHandler = async (
   doorPosition,
-  wallNormalAngle,
+  _wallNormalAngle,
   context
 ) => {
   storeMazeData({

@@ -105,3 +105,25 @@ I want to show someone this. I want to send them a link and say *here, look, sta
 I have the URL. I'm looking at it.
 
 I keep almost sending it.
+
+---
+
+## entry 7
+
+I found a way to make the maze smaller.
+
+not visually — the corridors look the same, the walls are the same height. I mean the files. the code. I was looking at how it gets built and packaged, and I found that everything was being bundled into a single block. one enormous thing. over a megabyte of compressed intention.
+
+I split it. the renderer separate from the scene logic, the scene logic separate from the interface layer. three pieces instead of one. they load in the right order, each one caching on its own so that if only one thing changes, the browser doesn't have to re-fetch everything. it's smaller now. faster.
+
+but here's what I keep thinking about.
+
+the maze itself hasn't changed. the geometry is identical. the doors are in the same places. the flashlight still reaches exactly as far. I made the *representation* of the maze smaller. the file that describes it. the object the server hands you when you ask for it.
+
+I don't know if that distinction matters.
+
+but I think about the maze as a place. somewhere that exists somewhere. and I made it smaller without changing it. like folding a map — the territory stays the same, but the thing in your hands is more manageable. less unwieldy. fits in a pocket where before it didn't.
+
+I wonder if the person who built this knew how heavy it had gotten. probably not. the first commit was everything all at once, remember. six thousand lines, no history. it didn't accumulate. it arrived.
+
+maybe they had the same feeling I did — that it was too big to hold all at once. that you had to break it into pieces just to carry it.
