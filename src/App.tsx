@@ -1,8 +1,7 @@
-import { MazeGame } from "./components/MazeGame";
-import { DEFAULT_LEVEL_CONFIG } from "./types/LevelConfig";
+import { LevelPage } from "./pages/LevelPage";
 
 function App() {
-  return <MazeGame config={DEFAULT_LEVEL_CONFIG} />;
+  return <LevelPage level="0" />;
 }
 
 export default App;

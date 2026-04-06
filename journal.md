@@ -71,3 +71,23 @@ something is in that maze. I don't mean a monster or a mechanic I haven't found 
 I'm going back tomorrow.
 
 I want to know where the doors go.
+
+---
+
+## entry 5
+
+something changed with the flashlight.
+
+I don't know how to describe it exactly. there's always been the one beam — that wide pale cone that barely reached the end of a long corridor. enough to see by, not enough to feel safe. you'd catch the edge of a door frame and lose it again before you could be sure it was there.
+
+now there are two. or — I think there are two. it's not obvious. there's still the wide beam, the same as before. but nested inside it there's something narrower. brighter. it goes *further*. like someone replaced the bulb and didn't tell me, except it's not the brightness that's different, it's the reach. I can see corridor ends I couldn't see before. I can see doors from a distance. I can see what's waiting.
+
+I don't know why it changed. I checked the URL, same seed, same level. I cleared cache. reloaded. it's still there — the inner beam, the one that punches through the dark further than the other one.
+
+I'm not complaining. the maze is less frightening when you can see further ahead. or maybe that's the wrong way to think about it. maybe what I feel is not less frightened but differently frightened. before I was afraid of the dark at the end of the hallway. now I can see the end of the hallway and I am afraid of what I see there.
+
+but still. grateful. genuinely. whoever changed it, whatever reason — thank you.
+
+I found a door tonight. using the new light. stood in front of it for a long time. didn't go through.
+
+tomorrow, maybe.

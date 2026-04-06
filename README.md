@@ -100,8 +100,9 @@ Navigate to `/level/<name>` — for example `/level/1` loads `public/static/leve
 
 | Level | URL | Description |
 |---|---|---|
-| `1` | `/level/1` | Backrooms — sickly yellow walls, bright fluorescent lighting, frequent ceiling lights, open areas via `widerRooms` |
-| `2` | `/level/2` | Dark dungeon — dim ambient light, brown stone walls, half-height partition barriers |
+| `0` | `/` and `/level/0` | Backrooms — sickly yellow walls, bright fluorescent lighting, frequent ceiling lights, open areas via `widerRooms` |
+| `1` | `/level/1` | Default — grey walls, dim ambient light, sparse ceiling lights |
+| `2` | `/level/2` | Dark dungeon — dim ambient light, brown stone walls, half-height partition barriers, VHS shader |
 
 ## Architecture
 

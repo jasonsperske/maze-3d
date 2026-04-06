@@ -8,6 +8,7 @@ interface FlashlightProps {
 
 export function Flashlight({ intensityMultiplier = 1 }: FlashlightProps = {}) {
   const spotLightRef = useRef<SpotLight>(null);
+  const innerSpotLightRef = useRef<SpotLight>(null);
   const { camera, gl } = useThree();
   const isPointerLockedRef = useRef(false);
   const flashlightOffsetRef = useRef(new Vector3(0, 0, -1)); // Offset from camera direction
@@ -55,14 +56,14 @@ export function Flashlight({ intensityMultiplier = 1 }: FlashlightProps = {}) {
 
   useFrame(() => {
     if (!spotLightRef.current) return;
-    
+
     // Position flashlight slightly below and forward from camera (like being held)
     const positionOffset = new Vector3(0, -0.3, 0.2);
     const flashlightPosition = camera.position.clone().add(positionOffset);
     spotLightRef.current.position.copy(flashlightPosition);
-    
+
     let flashlightDirection: Vector3;
-    
+
     if (isPointerLockedRef.current) {
       // When pointer locked, flashlight follows camera direction exactly
       flashlightDirection = new Vector3();
@@ -72,22 +73,41 @@ export function Flashlight({ intensityMultiplier = 1 }: FlashlightProps = {}) {
       // This makes the flashlight rotate with the camera but maintain mouse aiming
       flashlightDirection = flashlightOffsetRef.current.clone().applyQuaternion(camera.quaternion);
     }
-    
+
     const target = flashlightPosition.clone().add(flashlightDirection.multiplyScalar(10));
     spotLightRef.current.target.position.copy(target);
     spotLightRef.current.target.updateMatrixWorld();
+
+    // Inner hotspot beam shares position and direction
+    if (innerSpotLightRef.current) {
+      innerSpotLightRef.current.position.copy(flashlightPosition);
+      innerSpotLightRef.current.target.position.copy(target);
+      innerSpotLightRef.current.target.updateMatrixWorld();
+    }
   });
 
   return (
-    <spotLight
-      ref={spotLightRef}
-      intensity={50 * intensityMultiplier}
-      angle={Math.PI / 6 * Math.max(0.2, Math.min(2, intensityMultiplier))}
-      penumbra={0.5}
-      distance={30}
-      decay={2}
-      castShadow
-      color="#ffffff"
-    />
+    <>
+      <spotLight
+        ref={spotLightRef}
+        intensity={50 * intensityMultiplier}
+        angle={Math.PI / 6 * Math.max(0.2, Math.min(2, intensityMultiplier))}
+        penumbra={0.5}
+        distance={30}
+        decay={2}
+        castShadow
+        color="#ffffff"
+      />
+      <spotLight
+        ref={innerSpotLightRef}
+        intensity={100 * intensityMultiplier}
+        angle={Math.PI / 32 * Math.max(0.2, Math.min(2, intensityMultiplier))}
+        penumbra={0.6}
+        distance={60}
+        decay={1}
+        castShadow={false}
+        color="#ffffff"
+      />
+    </>
   );
 }
