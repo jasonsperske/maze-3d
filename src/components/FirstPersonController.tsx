@@ -7,6 +7,7 @@ interface FirstPersonControllerProps {
   maze: MazeCell[][];
   cellSize: number;
   position: Vector3;
+  initialRotation?: Euler;
   onPositionChange: (position: Vector3) => void;
   onRotationChange?: (rotation: Euler) => void;
   onDoorCollision?: (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => void;
@@ -16,6 +17,7 @@ export function FirstPersonController({
   maze,
   cellSize,
   position,
+  initialRotation,
   onPositionChange,
   onRotationChange,
   onDoorCollision,
@@ -35,7 +37,11 @@ export function FirstPersonController({
     rotateLeft: false,
     rotateRight: false,
   });
-  const euler = useRef(new Euler(0, 0, 0, "YXZ"));
+  const euler = useRef(
+    initialRotation
+      ? new Euler(initialRotation.x, initialRotation.y, initialRotation.z, "YXZ")
+      : new Euler(0, 0, 0, "YXZ")
+  );
   const levelingState = useRef({
     isLeveling: false,
     levelingSpeed: 2.0, // radians per second
@@ -45,6 +51,13 @@ export function FirstPersonController({
   const moveSpeed = 5;
   const currentPosition = useRef(position.clone());
   const lastDoorUuid = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (initialRotation) {
+      camera.quaternion.setFromEuler(euler.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

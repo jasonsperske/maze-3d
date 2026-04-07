@@ -21,7 +21,8 @@ export const apiDoorCollision: DoorCollisionHandler = async (
     doorPosition.y,
     doorPosition.z
   );
-  await callDoorAPI(window.location.href, context.seed, doorHash, {
+  const sourceUrl = window.location.origin + window.location.pathname;
+  await callDoorAPI(sourceUrl, context.seed, doorHash, context.doorId, {
     position: context.playerPosition,
     rotationY: context.cameraRotationY,
   });

@@ -2,6 +2,7 @@ export interface DoorCollisionContext {
   seed: number;
   playerPosition: { x: number; y: number; z: number };
   cameraRotationY: number;
+  doorId: string;
 }
 
 export type DoorCollisionHandler = (

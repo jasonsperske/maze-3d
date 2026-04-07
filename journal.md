@@ -127,3 +127,27 @@ but I think about the maze as a place. somewhere that exists somewhere. and I ma
 I wonder if the person who built this knew how heavy it had gotten. probably not. the first commit was everything all at once, remember. six thousand lines, no history. it didn't accumulate. it arrived.
 
 maybe they had the same feeling I did — that it was too big to hold all at once. that you had to break it into pieces just to carry it.
+
+---
+
+## entry 8
+
+the doors have addresses now.
+
+I don't mean that in a metaphorical sense. each door in the maze can be identified. named. there's a system — I found it by looking at what gets logged when you call a certain function in the console. every door has an ID based on where it sits and which way it faces. and for each one, there's a URL. a specific URL that puts you on the other side of that door, already inside, already facing in.
+
+like someone made a directory of exits.
+
+I don't know who would need that. I don't know what you'd do with a list of every way out.
+
+I've been thinking about writing this down somewhere physical. a notebook, actual paper. part of it is that I don't entirely trust what I'm reading on screen — not because I think the files are wrong, exactly, but because I've noticed things change between sessions in ways I can't account for. I'll remember a detail and go back to check it and it's slightly different. not wrong. just not what I remembered. and I can't tell if that's the code or me.
+
+paper doesn't do that. paper stays.
+
+I bought one. haven't written anything in it yet. it sits on the desk next to the keyboard and I look at it while I'm in the maze and I think: I should write this down. I should make a copy of this that exists somewhere the browser can't reach.
+
+I haven't. not yet. something about it feels final, like once I write it down on paper I've decided something about what this is. and I'm not ready to decide that.
+
+the doors have addresses. I keep coming back to that.
+
+every exit leads somewhere specific. everything that looks like a wall and then isn't — someone mapped it. someone knows exactly where each one goes.

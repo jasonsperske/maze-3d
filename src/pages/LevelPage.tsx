@@ -3,9 +3,10 @@ import { useLevelConfig } from "../hooks/useLevelConfig";
 
 interface LevelPageProps {
   level: string;
+  seed: string;
 }
 
-export function LevelPage({ level }: LevelPageProps) {
+export function LevelPage({ level, seed }: LevelPageProps) {
   const { config, status, error } = useLevelConfig(level);
 
   if (status === "loading") {
@@ -24,5 +25,5 @@ export function LevelPage({ level }: LevelPageProps) {
     );
   }
 
-  return <MazeGame config={config} />;
+  return <MazeGame config={config} level={level} seed={seed} />;
 }

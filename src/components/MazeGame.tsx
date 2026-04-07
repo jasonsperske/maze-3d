@@ -6,7 +6,7 @@ import { Maze3D } from "./Maze3D";
 import { FirstPersonController } from "./FirstPersonController";
 import { Flashlight } from "./Flashlight";
 import { CeilingLights } from "./CeilingLights";
-import { loadMazeData, clearMazeData, storeMazeData } from "../utils/doorUtils";
+import { storeMazeData, listMazeDoors } from "../utils/doorUtils";
 import { apiDoorCollision } from "../handlers/apiDoorCollision";
 import { type DoorCollisionContext } from "../handlers/types";
 import { type LevelConfig } from "../types/LevelConfig";
@@ -14,6 +14,19 @@ import { getShaderComponent } from "../shaders";
 
 interface MazeGameProps {
   config: LevelConfig;
+  level: string;
+  seed: string;
+}
+
+function seedFromString(s: string): number {
+  const n = parseInt(s, 10);
+  if (!isNaN(n)) return n;
+  // djb2 hash for named seeds like "house"
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h;
 }
 
 // Shared seeded random helper (same algorithm used throughout the project)
@@ -28,7 +41,7 @@ function makeSeededRandom(seed: number): () => number {
   };
 }
 
-export function MazeGame({ config }: MazeGameProps) {
+export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cameraRotation, setCameraRotation] = useState(
     new Euler(0, 0, 0, "YXZ")
@@ -80,36 +93,7 @@ export function MazeGame({ config }: MazeGameProps) {
       }
     }
 
-    const seedParam = urlParams.get("seed");
-    if (seedParam) {
-      clearMazeData();
-      const seedValue = parseInt(seedParam, 10);
-      const generator = new MazeGenerator(25, 25, seedValue);
-      generator.generate();
-      const start = generator.getStartPosition();
-      return {
-        seed: seedValue,
-        initialPosition: new Vector3(start.x, 1.7, start.z),
-        initialRotation: new Euler(0, 0, 0, "YXZ"),
-      };
-    }
-
-    const storedData = loadMazeData();
-    if (storedData) {
-      return {
-        seed: storedData.seed,
-        initialPosition: new Vector3(
-          storedData.position.x,
-          storedData.position.y,
-          storedData.position.z
-        ),
-        initialRotation: storedData.rotation
-          ? new Euler(storedData.rotation.x, storedData.rotation.y, storedData.rotation.z, "YXZ")
-          : new Euler(0, 0, 0, "YXZ"),
-      };
-    }
-
-    const seedValue = Math.floor(Math.random() * 1000000);
+    const seedValue = seedFromString(seedProp);
     const generator = new MazeGenerator(25, 25, seedValue);
     generator.generate();
     const start = generator.getStartPosition();
@@ -118,7 +102,7 @@ export function MazeGame({ config }: MazeGameProps) {
       initialPosition: new Vector3(start.x, 1.7, start.z),
       initialRotation: new Euler(0, 0, 0, "YXZ"),
     };
-  }, [forceReload]);
+  }, [forceReload, seedProp]);
 
   const maze = useMemo(() => {
     const generator = new MazeGenerator(25, 25, seed);
@@ -167,9 +151,9 @@ export function MazeGame({ config }: MazeGameProps) {
       position: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
       rotation: { x: cameraRotation.x, y: cameraRotation.y, z: cameraRotation.z },
     };
-    const url = window.location.origin + window.location.pathname + "?hash=" + btoa(JSON.stringify(state));
+    const url = `${window.location.origin}/level/${level}/${seedProp}?hash=${btoa(JSON.stringify(state))}`;
     window.location.href = url;
-  }, [seed, playerPosition, cameraRotation]);
+  }, [seed, playerPosition, cameraRotation, level, seedProp]);
 
   const letThereBeLight = useCallback((factor: number = 1) => {
     setFlashlightIntensity(factor);
@@ -213,16 +197,33 @@ export function MazeGame({ config }: MazeGameProps) {
     }
   }, []);
 
+  const cellSize = 4;
+  const wallHeight = 3;
+
+  const doorIdMap = useMemo(() => {
+    const doors = listMazeDoors(
+      maze, seed, cellSize, wallHeight,
+      config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency
+    );
+    const map = new Map<string, string>();
+    for (const door of doors) {
+      map.set(`${door.position.x},${door.position.z}`, door.id);
+    }
+    return map;
+  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency]);
+
   const handleDoorCollision = useCallback(
     (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => {
+      const doorId = doorIdMap.get(`${doorPosition.x},${doorPosition.z}`) ?? `door-unknown-${doorPosition.x}-${doorPosition.z}`;
       const context: DoorCollisionContext = {
         seed,
         playerPosition: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
         cameraRotationY: cameraRotation.y,
+        doorId,
       };
       apiDoorCollision(doorPosition, wallNormalAngle, context);
     },
-    [seed, playerPosition, cameraRotation]
+    [seed, playerPosition, cameraRotation, doorIdMap]
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -234,9 +235,6 @@ export function MazeGame({ config }: MazeGameProps) {
       setIsFullscreen(false);
     }
   }, []);
-
-  const cellSize = 4;
-  const wallHeight = 3;
 
   // Mirror CeilingLights' deterministic placement to know where lights are in world space.
   const lightPositions = useMemo(() => {
@@ -372,18 +370,39 @@ export function MazeGame({ config }: MazeGameProps) {
     [playerPosition, cellSize, seed, cameraRotation.y, config.doorFrequency, config.lightSpacing]
   );
 
+  const letMeOutOfHere = useCallback(() => {
+    const doors = listMazeDoors(
+      maze,
+      seed,
+      cellSize,
+      wallHeight,
+      config.doorFrequency,
+      config.halfHeightPartitions,
+      config.halfHeightFrequency
+    );
+    const result = doors.map((d) => ({
+      game_door_id: d.id,
+      label: `${d.direction} wall, cell (${d.cell.x}, ${d.cell.z})`,
+      dest_url: d.dest_url,
+    }));
+    console.table(result);
+    return result;
+  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency]);
+
   useEffect(() => {
     (window as any).secretToEverybody = () => printMazeASCII(maze);
     (window as any).saveState = saveState;
     (window as any).loadState = loadState;
     (window as any).letThereBeLight = letThereBeLight;
+    (window as any).letMeOutOfHere = letMeOutOfHere;
     return () => {
       delete (window as any).secretToEverybody;
       delete (window as any).saveState;
       delete (window as any).loadState;
       delete (window as any).letThereBeLight;
+      delete (window as any).letMeOutOfHere;
     };
-  }, [maze, printMazeASCII, saveState, loadState, letThereBeLight]);
+  }, [maze, printMazeASCII, saveState, loadState, letThereBeLight, letMeOutOfHere]);
 
   return (
     <div
@@ -429,6 +448,7 @@ export function MazeGame({ config }: MazeGameProps) {
           maze={maze}
           cellSize={cellSize}
           position={playerPosition}
+          initialRotation={initialRotation}
           onPositionChange={handlePositionChange}
           onRotationChange={handleRotationChange}
           onDoorCollision={handleDoorCollision}
