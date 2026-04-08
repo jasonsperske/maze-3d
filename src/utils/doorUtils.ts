@@ -147,15 +147,12 @@ export interface PlayerContext {
 function realDoorAPI(
   currentUrl: string,
   doorId: string,
-  player: PlayerContext
+  _player: PlayerContext
 ): void {
+  const source = new URL(currentUrl);
   const params = new URLSearchParams({
-    source: currentUrl,
-    door_id: doorId,
-    x: String(player.position.x),
-    y: String(player.position.y),
-    z: String(player.position.z),
-    rotation: String(player.rotationY),
+    source: source.origin + source.pathname,
+    door: doorId,
   });
   window.location.href = `${DOOR_API_URL}?${params.toString()}`;
 }
@@ -174,6 +171,7 @@ export async function callDoorAPI(
     realDoorAPI(currentUrl, doorId, player);
   }
 }
+
 
 // Local storage utilities
 export interface StoredMazeData {

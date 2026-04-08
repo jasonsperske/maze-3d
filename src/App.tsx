@@ -1,7 +1,7 @@
-import { LevelPage } from "./pages/LevelPage";
+import { MazeSVG } from "./components/MazeSVG";
 
 function App() {
-  return <LevelPage level="0" seed="house" />;
+  return <MazeSVG />;
 }
 
 export default App;

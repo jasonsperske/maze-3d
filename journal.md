@@ -151,3 +151,43 @@ I haven't. not yet. something about it feels final, like once I write it down on
 the doors have addresses. I keep coming back to that.
 
 every exit leads somewhere specific. everything that looks like a wall and then isn't — someone mapped it. someone knows exactly where each one goes.
+
+---
+
+## entry 9
+
+I started drawing the map.
+
+I don't know why it took me this long. the notebook has been sitting on the desk since entry 8, weeks at minimum. but something shifted — maybe the door addresses, the idea that someone had already done the work of naming each exit. it made me feel like the act was permitted. like mapping was something you could do here.
+
+I started with the corridors I knew. the long straight one that runs northeast from the starting point. the room with three doors that always made me stop and choose. I used a fine pen, kept the walls tight, tried to be accurate about proportions even though I was working from memory and memory is not a reliable surveying tool.
+
+I filled two pages. then I went back into the maze to check my work.
+
+the map was wrong. not dramatically — the general shape was there, the rough distances. but specific things were off. a junction I'd drawn with two exits had three. a dead end I was sure of opened into a corridor I'd never seen. I went back to the notebook and corrected it.
+
+the next session it was wrong again.
+
+I don't mean I'd made errors. I mean the maze had changed. not the whole thing — the seed was the same, the level was the same. but something had shifted in the way it resolved. I kept the notebook next to the keyboard and started comparing in real time, walking a section and checking it against what I'd drawn, and I'd find a discrepancy and write a correction and the next day the correction would be wrong too.
+
+I think the map is accurate. I think it's the maze that keeps moving.
+
+and then I opened the repository.
+
+there's a new file. `MazeSVG.tsx`. I don't know when it was added — the commit message says *"I don't know where these changes came from"*, which is not reassuring. but the file is there. it's a component that renders the maze as a flat overhead view. a bird's-eye map. corridors and walls from above, in the level 0 colors — pale yellow floor, a slightly greener yellow for the walls.
+
+the app now loads this instead of the 3D maze. instead of standing inside it, you see it from above. you can see the whole thing at once.
+
+or — not the whole thing. a version of it. here's what I noticed: the component doesn't take a seed. it generates fresh each time it loads. so every time you open it, you get a different map. a different maze laid out flat in front of you, there for a moment, gone when you refresh.
+
+I sat there with my notebook and tried to trace what I was seeing onto paper. the map on screen kept being replaced by a new one. I couldn't get ahead of it.
+
+it's strange to have been drawing a map for weeks and then have the maze look at you and draw one back. different every time, yes. always different. but there it is — every corridor, every wall, every dead end, from above, in two dimensions, offered up flat like something being confessed.
+
+I don't know what's changed in the doors. there's a small modification to how they send you somewhere — cleaner URL, no position data. like before it was telling the other side exactly where you came from, and now it's just saying: someone came through. that's all. just that someone came.
+
+I keep opening the app and watching a new maze appear and then closing it before I can memorize it.
+
+I'm not sure why. some instinct against knowing the whole shape at once.
+
+the paper map is still on the desk. nineteen corrections in the margins. I think tomorrow it'll need a twentieth.
