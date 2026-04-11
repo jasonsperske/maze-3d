@@ -7,7 +7,7 @@ interface LevelPageProps {
 }
 
 export function LevelPage({ level, seed }: LevelPageProps) {
-  const { config, status, error } = useLevelConfig(level);
+  const { config, status, error } = useLevelConfig(level, seed);
 
   if (status === "loading") {
     return (

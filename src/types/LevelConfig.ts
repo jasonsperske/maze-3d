@@ -1,4 +1,17 @@
 export interface LevelConfig {
+  /**
+   * Which level provider to use for geometry generation.
+   * Defaults to "3DMaze" (procedural DFS maze).
+   * Other built-in option: "DoomMap" (JSON-encoded Doom-style map via mapData).
+   */
+  walldef?: string;
+
+  /**
+   * Map data for providers that need it (e.g. DoomMap).
+   * Shape is provider-specific; see the provider's documentation.
+   */
+  mapData?: unknown;
+
   // Visuals
   wallColor: string;
   floorColor: string;

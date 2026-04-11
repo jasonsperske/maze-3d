@@ -1,11 +1,10 @@
 import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Vector3, Euler, Raycaster, Vector2, Box3 } from "three";
-import { type MazeCell } from "../utils/mazeGenerator";
+import type { LevelGeometry, WallSegment } from "../types/LevelGeometry";
 
 interface FirstPersonControllerProps {
-  maze: MazeCell[][];
-  cellSize: number;
+  level: LevelGeometry;
   position: Vector3;
   initialRotation?: Euler;
   onPositionChange: (position: Vector3) => void;
@@ -13,9 +12,46 @@ interface FirstPersonControllerProps {
   onDoorCollision?: (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => void;
 }
 
+/** Squared distance from point (px,pz) to segment (ax,az)–(bx,bz). */
+function pointToSegmentDistSq(
+  px: number, pz: number,
+  ax: number, az: number,
+  bx: number, bz: number,
+): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq === 0) {
+    const ex = px - ax;
+    const ez = pz - az;
+    return ex * ex + ez * ez;
+  }
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lenSq));
+  const cx = ax + t * dx - px;
+  const cz = az + t * dz - pz;
+  return cx * cx + cz * cz;
+}
+
+const PLAYER_RADIUS = 0.3;
+const WALL_HALF_THICKNESS = 0.1;
+const COLLISION_DIST = PLAYER_RADIUS + WALL_HALF_THICKNESS;
+const COLLISION_DIST_SQ = COLLISION_DIST * COLLISION_DIST;
+
+function checkCollision(newPosition: Vector3, walls: WallSegment[]): boolean {
+  const px = newPosition.x;
+  const pz = newPosition.z;
+  for (const seg of walls) {
+    // Door panel segments are collision-free in the opening center —
+    // the side frames are separate non-door segments that will block.
+    if (seg.isDoor) continue;
+    const dSq = pointToSegmentDistSq(px, pz, seg.x1, seg.z1, seg.x2, seg.z2);
+    if (dSq < COLLISION_DIST_SQ) return true;
+  }
+  return false;
+}
+
 export function FirstPersonController({
-  maze,
-  cellSize,
+  level,
   position,
   initialRotation,
   onPositionChange,
@@ -44,7 +80,7 @@ export function FirstPersonController({
   );
   const levelingState = useRef({
     isLeveling: false,
-    levelingSpeed: 2.0, // radians per second
+    levelingSpeed: 2.0,
     targetX: 0,
   });
 
@@ -132,7 +168,6 @@ export function FirstPersonController({
       mouseState.current.isPointerLocked =
         document.pointerLockElement === document.body;
 
-      // Start leveling when exiting pointer lock
       if (wasPointerLocked && !mouseState.current.isPointerLocked) {
         levelingState.current.isLeveling = true;
         levelingState.current.targetX = 0;
@@ -155,72 +190,27 @@ export function FirstPersonController({
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
       document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener(
-        "pointerlockchange",
-        handlePointerLockChange
-      );
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
       document.removeEventListener("click", handleClick);
     };
   }, [camera]);
 
-  const checkCollision = (newPosition: Vector3): boolean => {
-    // Convert world position to maze coordinates
-    // Account for the fact that maze cells are centered at (x+0.5)*cellSize, (z+0.5)*cellSize
-    const mazeX = Math.floor(newPosition.x / cellSize);
-    const mazeZ = Math.floor(newPosition.z / cellSize);
-
-    // Check if outside maze boundaries
-    if (
-      mazeX < 0 ||
-      mazeX >= maze.length ||
-      mazeZ < 0 ||
-      mazeZ >= maze[0].length
-    ) {
-      return true;
-    }
-
-    const cell = maze[mazeX][mazeZ];
-
-    // Get local position within the cell (0 to cellSize)
-    const localX = newPosition.x - mazeX * cellSize;
-    const localZ = newPosition.z - mazeZ * cellSize;
-
-    const buffer = 0.3;
-
-    // Check collision with walls
-    if (cell.walls.north && localZ < buffer) return true;
-    if (cell.walls.south && localZ > cellSize - buffer) return true;
-    if (cell.walls.west && localX < buffer) return true;
-    if (cell.walls.east && localX > cellSize - buffer) return true;
-
-    return false;
-  };
-
   useFrame((_, delta) => {
-    // Handle keyboard object detection (? key)
     if ((window as any).pendingDetection) {
       const detectionInfo = (window as any).pendingDetection;
       delete (window as any).pendingDetection;
 
-      // Create raycaster for detection
       const raycaster = new Raycaster();
       const mouse = new Vector2(detectionInfo.x, detectionInfo.y);
       raycaster.setFromCamera(mouse, camera);
 
-      // Get all objects in the scene
       if (scene) {
         const intersects = raycaster.intersectObjects(scene.children, true);
-
         if (intersects.length > 0) {
           const clickedObject = intersects[0].object;
-          const objectName = clickedObject.constructor.name;
-          const objectKey = (clickedObject as any).key || "no-key";
-          const userData = clickedObject.userData || {};
-
           console.log("Object in crosshairs:", {
-            name: objectName,
-            key: objectKey,
-            userData: userData,
+            name: clickedObject.constructor.name,
+            userData: clickedObject.userData,
             position: clickedObject.position,
             distance: intersects[0].distance,
           });
@@ -230,81 +220,48 @@ export function FirstPersonController({
       }
     }
 
-    // Handle keyboard rotation
-    const rotationSpeed = 2.0; // radians per second
+    const rotationSpeed = 2.0;
 
-    // Handle camera leveling when exiting mouse look
     if (levelingState.current.isLeveling) {
       euler.current.setFromQuaternion(camera.quaternion);
-
       const deltaX = levelingState.current.targetX - euler.current.x;
       const absDeltaX = Math.abs(deltaX);
-
-      // If we're close enough to the target, snap to it and stop leveling
       if (absDeltaX < 0.01) {
         euler.current.x = levelingState.current.targetX;
         levelingState.current.isLeveling = false;
       } else {
-        // Move towards the target at a consistent speed
         const direction = Math.sign(deltaX);
-        const moveAmount = Math.min(
-          absDeltaX,
-          levelingState.current.levelingSpeed * delta
-        );
+        const moveAmount = Math.min(absDeltaX, levelingState.current.levelingSpeed * delta);
         euler.current.x += direction * moveAmount;
       }
-
       camera.quaternion.setFromEuler(euler.current);
-
-      if (onRotationChange) {
-        onRotationChange(euler.current.clone());
-      }
-    }
-    // Handle keyboard rotation (only if not leveling)
-    else if (
-      rotationState.current.rotateLeft ||
-      rotationState.current.rotateRight
-    ) {
+      if (onRotationChange) onRotationChange(euler.current.clone());
+    } else if (rotationState.current.rotateLeft || rotationState.current.rotateRight) {
       euler.current.setFromQuaternion(camera.quaternion);
-      if (rotationState.current.rotateLeft) {
-        euler.current.y += rotationSpeed * delta;
-      }
-      if (rotationState.current.rotateRight) {
-        euler.current.y -= rotationSpeed * delta;
-      }
+      if (rotationState.current.rotateLeft) euler.current.y += rotationSpeed * delta;
+      if (rotationState.current.rotateRight) euler.current.y -= rotationSpeed * delta;
       camera.quaternion.setFromEuler(euler.current);
-
-      if (onRotationChange) {
-        onRotationChange(euler.current.clone());
-      }
+      if (onRotationChange) onRotationChange(euler.current.clone());
     }
 
     const direction = new Vector3();
     const right = new Vector3();
 
-    // Get camera direction but flatten Y to move on ground plane
     camera.getWorldDirection(direction);
     direction.y = 0;
     direction.normalize();
-
-    // Calculate right vector
     right.crossVectors(camera.up, direction).normalize();
 
     const velocity = new Vector3();
-
     if (moveState.current.forward) velocity.add(direction);
     if (moveState.current.backward) velocity.sub(direction);
     if (moveState.current.left) velocity.add(right);
     if (moveState.current.right) velocity.sub(right);
 
-    // Only normalize if there's movement to avoid NaN
     if (velocity.length() > 0) {
       velocity.normalize().multiplyScalar(moveSpeed * delta);
 
-      // Check for door collision by proximity to each door's wall plane.
-      // Uses the scene from useThree() — avoids relying on camera.parent which
-      // may be null in R3F. Checks perpendicular distance to the wall plane and
-      // lateral distance within the corridor so off-center players still trigger.
+      // Door collision detection via scene traversal (works with any mesh geometry)
       const TRIGGER_DEPTH = 1.0;
       let hitDoorUuid: string | null = null;
 
@@ -317,8 +274,6 @@ export function FirstPersonController({
         const size = new Box3().setFromObject(obj).getSize(new Vector3());
         const isEastWestDoor = size.x < size.z;
 
-        // perpDist: how close the player is to the wall plane
-        // lateralDist: how far off-center the player is along the wall
         const perpDist = isEastWestDoor
           ? Math.abs(camera.position.x - doorWorldPos.x)
           : Math.abs(camera.position.z - doorWorldPos.z);
@@ -326,14 +281,13 @@ export function FirstPersonController({
           ? Math.abs(camera.position.z - doorWorldPos.z)
           : Math.abs(camera.position.x - doorWorldPos.x);
 
-        // Only trigger when moving toward the door, not away from it
+        const lateralSpan = obj.userData.lateralSpan ?? 4;
         const movingToward = isEastWestDoor
           ? velocity.x * (doorWorldPos.x - camera.position.x) > 0
           : velocity.z * (doorWorldPos.z - camera.position.z) > 0;
 
-        if (perpDist < TRIGGER_DEPTH && lateralDist < cellSize / 2 && movingToward) {
+        if (perpDist < TRIGGER_DEPTH && lateralDist < lateralSpan / 2 && movingToward) {
           hitDoorUuid = obj.uuid;
-
           if (onDoorCollision && lastDoorUuid.current !== obj.uuid) {
             lastDoorUuid.current = obj.uuid;
             const wallNormalAngle = isEastWestDoor
@@ -344,26 +298,22 @@ export function FirstPersonController({
         }
       });
 
-      if (hitDoorUuid === null) {
-        lastDoorUuid.current = null; // Reset when not near any door
-      }
-
-      if (hitDoorUuid) return; // Stop movement while in door volume
+      if (hitDoorUuid === null) lastDoorUuid.current = null;
+      if (hitDoorUuid) return;
     }
 
     const newPosition = currentPosition.current.clone().add(velocity);
 
-    // Test X movement
-    const testPositionX = currentPosition.current.clone();
-    testPositionX.x = newPosition.x;
-    if (!checkCollision(testPositionX)) {
+    // Axis-separated collision against wall segments
+    const testX = currentPosition.current.clone();
+    testX.x = newPosition.x;
+    if (!checkCollision(testX, level.walls)) {
       currentPosition.current.x = newPosition.x;
     }
 
-    // Test Z movement
-    const testPositionZ = currentPosition.current.clone();
-    testPositionZ.z = newPosition.z;
-    if (!checkCollision(testPositionZ)) {
+    const testZ = currentPosition.current.clone();
+    testZ.z = newPosition.z;
+    if (!checkCollision(testZ, level.walls)) {
       currentPosition.current.z = newPosition.z;
     }
 

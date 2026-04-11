@@ -1,0 +1,14 @@
+{
+  "walldef": "DoomMap",
+  "wallColor": "#888888",
+  "floorColor": "#555555",
+  "ceilingColor": "#2a2a2a",
+  "doorFrequency": 0,
+  "ambientLight": 0.3,
+  "lightSpacing": 8,
+  "halfHeightPartitions": false,
+  "halfHeightColor": "#666666",
+  "halfHeightFrequency": 0.0,
+  "widerRooms": false,
+  "widerRoomFrequency": 0.0
+}
