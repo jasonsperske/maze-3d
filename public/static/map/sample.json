@@ -1,0 +1,13 @@
+{
+  "wallColor": "#7c8a9c",
+  "floorColor": "#2c2c2c",
+  "ceilingColor": "#1a1a1a",
+  "ambientLight": 0.5,
+  "doorFrequency": 0,
+  "lightSpacing": 3,
+  "halfHeightPartitions": false,
+  "halfHeightColor": "#7c8a9c",
+  "halfHeightFrequency": 0,
+  "widerRooms": false,
+  "widerRoomFrequency": 0
+}

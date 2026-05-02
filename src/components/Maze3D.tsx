@@ -8,6 +8,9 @@ interface Maze3DProps {
   wallHeight: number;
   seed: number;
   config: LevelConfig;
+  // When set, doors are placed only at these wall positions (key = "x,z,direction").
+  // Bypasses random door placement and disables half-height partitions.
+  explicitDoors?: Map<string, string>;
   onDoorCollision?: (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => void;
 }
 
@@ -22,7 +25,7 @@ function makeSeededRandom(seed: number): () => number {
   };
 }
 
-export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps) {
+export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors }: Maze3DProps) {
   const walls = useMemo(() => {
     const elements: JSX.Element[] = [];
     const random = makeSeededRandom(seed);
@@ -36,11 +39,17 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps
       key: string,
       px: number, pz: number,
       fullW: number, fullD: number,
-      isNS: boolean
+      isNS: boolean,
+      cellX: number,
+      cellZ: number,
+      direction: "north" | "south" | "east" | "west"
     ) => {
-      const hasDoor = random() < config.doorFrequency;
+      const hasDoor = explicitDoors
+        ? explicitDoors.has(`${cellX},${cellZ},${direction}`)
+        : random() < config.doorFrequency;
       const isHalf =
         !hasDoor &&
+        !explicitDoors &&
         config.halfHeightPartitions &&
         halfRandom() < config.halfHeightFrequency;
 
@@ -117,7 +126,8 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps
             `wall-north-${x}-${z}`,
             baseX, baseZ - cellSize / 2,
             cellSize, 0.2,
-            true
+            true,
+            x, z, "north"
           );
         }
         if (cell.walls.south) {
@@ -125,7 +135,8 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps
             `wall-south-${x}-${z}`,
             baseX, baseZ + cellSize / 2,
             cellSize, 0.2,
-            true
+            true,
+            x, z, "south"
           );
         }
         if (cell.walls.east) {
@@ -133,7 +144,8 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps
             `wall-east-${x}-${z}`,
             baseX + cellSize / 2, baseZ,
             0.2, cellSize,
-            false
+            false,
+            x, z, "east"
           );
         }
         if (cell.walls.west) {
@@ -141,14 +153,15 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config }: Maze3DProps
             `wall-west-${x}-${z}`,
             baseX - cellSize / 2, baseZ,
             0.2, cellSize,
-            false
+            false,
+            x, z, "west"
           );
         }
       });
     });
 
     return elements;
-  }, [maze, cellSize, wallHeight, seed, config]);
+  }, [maze, cellSize, wallHeight, seed, config, explicitDoors]);
 
   const floor = useMemo(() => {
     const mazeWidth = maze.length * cellSize;

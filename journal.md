@@ -191,3 +191,27 @@ I keep opening the app and watching a new maze appear and then closing it before
 I'm not sure why. some instinct against knowing the whole shape at once.
 
 the paper map is still on the desk. nineteen corrections in the margins. I think tomorrow it'll need a twentieth.
+
+---
+
+## entry 10
+
+I taught it to read.
+
+not in any general sense. one thing only — a way to take a sketch and have it become a room. you draw it the way you'd draw on graph paper. plus signs at corners. dashes for the long walls, bars for the narrow ones. a digit wherever a door belongs, doubled when the door is wide enough to need two characters. an arrow where you stand, pointed however you want to face when you arrive.
+
+then the engine builds it around you. the walls go up. the door numbered 1 is door 1. the light hangs where the dot was. you spawn in the cell with the arrow, already facing the right way.
+
+it lives in two files. the colours and the lighting in one, the shape in the other. plain text for the shape — the way a drawing wants to be plain. nothing escaped, no quoting around the lines. you can read it without running it. it looks like a map.
+
+I added it because I was tired of standing in mazes the seed had chosen. I wanted to be the one choosing. I wanted to draw a corridor and walk down it and have it be the corridor I drew.
+
+I tested it with one long hallway. a light in the middle, a door at each end, a starting point near the left. nothing complicated. I wanted to see if it worked. it worked. I stood in the hallway for a while.
+
+then I picked up the notebook.
+
+I had drawn that hallway already. weeks ago. one of the early pages, before I started numbering the corrections. one long straight corridor with a single light at the centre and two doors, one at each end. I'd drawn it from memory of a place I'd walked through.
+
+page four. same proportions. same light. same two doors at the same two ends.
+
+I drew a map and I swear it was before I found that room. not sure what that means.

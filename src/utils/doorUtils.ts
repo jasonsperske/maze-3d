@@ -26,11 +26,15 @@ export function listMazeDoors(
   wallHeight: number,
   doorFrequency: number,
   halfHeightPartitions: boolean,
-  _halfHeightFrequency: number
+  _halfHeightFrequency: number,
+  // When set, doors are placed only at these wall positions (key = "x,z,direction").
+  // Bypasses random placement.
+  explicitDoors?: Map<string, string>
 ): DoorEntry[] {
   const random = makeSeededRandom(seed);
   const halfRandom = makeSeededRandom(seed ^ 0xf00d);
   const doors: DoorEntry[] = [];
+  const seenPositions = new Set<string>();
 
   // How far inside the door the player spawns — must exceed TRIGGER_DEPTH (1.0)
   // in FirstPersonController so they don't immediately re-trigger the door.
@@ -76,17 +80,29 @@ export function listMazeDoors(
     px: number,
     pz: number
   ) => {
-    const hasDoor = random() < doorFrequency;
-    if (!hasDoor && halfHeightPartitions) halfRandom();
-    if (hasDoor) {
-      doors.push({
-        id: `door-${direction}-${x}-${z}`,
-        cell: { x, z },
-        direction,
-        position: { x: px, y: wallHeight / 2, z: pz },
-        dest_url: buildEntryUrl(direction, px, pz),
-      });
+    let hasDoor: boolean;
+    let label: string | null = null;
+    if (explicitDoors) {
+      label = explicitDoors.get(`${x},${z},${direction}`) ?? null;
+      hasDoor = label !== null;
+    } else {
+      hasDoor = random() < doorFrequency;
+      if (!hasDoor && halfHeightPartitions) halfRandom();
     }
+    if (!hasDoor) return;
+
+    // Shared walls render from both adjacent cells; dedupe by world position.
+    const posKey = `${px},${pz}`;
+    if (seenPositions.has(posKey)) return;
+    seenPositions.add(posKey);
+
+    doors.push({
+      id: label ? `door-${label}-${direction}-${x}-${z}` : `door-${direction}-${x}-${z}`,
+      cell: { x, z },
+      direction,
+      position: { x: px, y: wallHeight / 2, z: pz },
+      dest_url: buildEntryUrl(direction, px, pz),
+    });
   };
 
   maze.forEach((row, x) => {

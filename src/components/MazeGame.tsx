@@ -11,11 +11,16 @@ import { apiDoorCollision } from "../handlers/apiDoorCollision";
 import { type DoorCollisionContext } from "../handlers/types";
 import { type LevelConfig } from "../types/LevelConfig";
 import { getShaderComponent } from "../shaders";
+import { type ParsedMap, directionToRotationY } from "../utils/asciiMapParser";
 
 interface MazeGameProps {
   config: LevelConfig;
-  level: string;
-  seed: string;
+  // Random-mode props (used when mapData is absent):
+  level?: string;
+  seed?: string;
+  // Map-mode props: when set, use a pre-parsed ASCII map and skip generation.
+  mapName?: string;
+  mapData?: ParsedMap;
 }
 
 function seedFromString(s: string): number {
@@ -41,13 +46,17 @@ function makeSeededRandom(seed: number): () => number {
   };
 }
 
-export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
+export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: MazeGameProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cameraRotation, setCameraRotation] = useState(
     new Euler(0, 0, 0, "YXZ")
   );
   const [forceReload, setForceReload] = useState(0);
   const [flashlightIntensity, setFlashlightIntensity] = useState(1);
+
+  const cellSize = 4;
+  const wallHeight = 3;
+  const isMapMode = !!mapData;
 
   const { seed, initialPosition, initialRotation } = useMemo(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -93,7 +102,18 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
       }
     }
 
-    const seedValue = seedFromString(seedProp);
+    if (mapData && mapName) {
+      const seedValue = seedFromString(mapName);
+      const startX = mapData.start.x * cellSize + cellSize / 2;
+      const startZ = mapData.start.z * cellSize + cellSize / 2;
+      return {
+        seed: seedValue,
+        initialPosition: new Vector3(startX, 1.7, startZ),
+        initialRotation: new Euler(0, directionToRotationY(mapData.start.direction), 0, "YXZ"),
+      };
+    }
+
+    const seedValue = seedFromString(seedProp ?? "0");
     const generator = new MazeGenerator(25, 25, seedValue);
     generator.generate();
     const start = generator.getStartPosition();
@@ -102,9 +122,11 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
       initialPosition: new Vector3(start.x, 1.7, start.z),
       initialRotation: new Euler(0, 0, 0, "YXZ"),
     };
-  }, [forceReload, seedProp]);
+  }, [forceReload, seedProp, mapName, mapData]);
 
   const maze = useMemo(() => {
+    if (mapData) return mapData.grid;
+
     const generator = new MazeGenerator(25, 25, seed);
     const grid = generator.generate();
 
@@ -129,7 +151,7 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
     }
 
     return grid;
-  }, [seed, config.widerRooms, config.widerRoomFrequency]);
+  }, [seed, mapData, config.widerRooms, config.widerRoomFrequency]);
 
   const [playerPosition, setPlayerPosition] = useState(initialPosition);
 
@@ -151,9 +173,12 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
       position: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
       rotation: { x: cameraRotation.x, y: cameraRotation.y, z: cameraRotation.z },
     };
-    const url = `${window.location.origin}/level/${level}/${seedProp}?hash=${btoa(JSON.stringify(state))}`;
+    const path = isMapMode
+      ? `/map/${mapName}`
+      : `/level/${level}/${seedProp}`;
+    const url = `${window.location.origin}${path}?hash=${btoa(JSON.stringify(state))}`;
     window.location.href = url;
-  }, [seed, playerPosition, cameraRotation, level, seedProp]);
+  }, [seed, playerPosition, cameraRotation, level, seedProp, mapName, isMapMode]);
 
   const letThereBeLight = useCallback((factor: number = 1) => {
     setFlashlightIntensity(factor);
@@ -197,20 +222,18 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
     }
   }, []);
 
-  const cellSize = 4;
-  const wallHeight = 3;
-
   const doorIdMap = useMemo(() => {
     const doors = listMazeDoors(
       maze, seed, cellSize, wallHeight,
-      config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency
+      config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency,
+      mapData?.doors
     );
     const map = new Map<string, string>();
     for (const door of doors) {
       map.set(`${door.position.x},${door.position.z}`, door.id);
     }
     return map;
-  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency]);
+  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency, mapData]);
 
   const handleDoorCollision = useCallback(
     (doorPosition: { x: number; y: number; z: number }, wallNormalAngle: number) => {
@@ -239,6 +262,21 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
   // Mirror CeilingLights' deterministic placement to know where lights are in world space.
   const lightPositions = useMemo(() => {
     const positions: Array<{ x: number; y: number; z: number }> = [];
+
+    if (mapData) {
+      for (const key of mapData.lights) {
+        const [xs, zs] = key.split(",");
+        const x = Number(xs);
+        const z = Number(zs);
+        positions.push({
+          x: x * cellSize + cellSize / 2,
+          y: wallHeight - 0.3,
+          z: z * cellSize + cellSize / 2,
+        });
+      }
+      return positions;
+    }
+
     const random = makeSeededRandom(seed);
     for (let x = 0; x < maze.length; x += config.lightSpacing + Math.floor(random() * 5)) {
       for (let z = 0; z < maze[0].length; z += config.lightSpacing + Math.floor(random() * 5)) {
@@ -252,7 +290,7 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
       }
     }
     return positions;
-  }, [maze, seed, config.lightSpacing, cellSize, wallHeight]);
+  }, [maze, seed, config.lightSpacing, cellSize, wallHeight, mapData]);
 
   // Exponential proximity to nearest light — updated every render since playerPosition is state.
   const proximityRef = useRef(0);
@@ -378,7 +416,8 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
       wallHeight,
       config.doorFrequency,
       config.halfHeightPartitions,
-      config.halfHeightFrequency
+      config.halfHeightFrequency,
+      mapData?.doors
     );
     const result = doors.map((d) => ({
       game_door_id: d.id,
@@ -387,7 +426,7 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
     }));
     console.table(result);
     return result;
-  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency]);
+  }, [maze, seed, cellSize, wallHeight, config.doorFrequency, config.halfHeightPartitions, config.halfHeightFrequency, mapData]);
 
   useEffect(() => {
     (window as any).secretToEverybody = () => printMazeASCII(maze);
@@ -435,6 +474,7 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
           wallHeight={wallHeight}
           seed={seed}
           lightSpacing={config.lightSpacing}
+          explicitLights={mapData?.lights}
         />
         <Maze3D
           maze={maze}
@@ -442,6 +482,7 @@ export function MazeGame({ config, level, seed: seedProp }: MazeGameProps) {
           wallHeight={wallHeight}
           seed={seed}
           config={config}
+          explicitDoors={mapData?.doors}
           onDoorCollision={handleDoorCollision}
         />
         <FirstPersonController

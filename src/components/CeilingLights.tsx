@@ -7,6 +7,9 @@ interface CeilingLightsProps {
   wallHeight: number;
   seed: number;
   lightSpacing: number;
+  // When set, lights are placed only at these cell coordinates (key = "x,z").
+  // Bypasses random placement.
+  explicitLights?: Set<string>;
 }
 
 export function CeilingLights({
@@ -15,79 +18,88 @@ export function CeilingLights({
   wallHeight,
   seed,
   lightSpacing,
+  explicitLights,
 }: CeilingLightsProps) {
   const lights = useMemo(() => {
     const lightElements: JSX.Element[] = [];
 
-    // Seeded random for consistent light placement
-    const seededRandom = (seed: number): (() => number) => {
-      let m_z = 987654321;
-      let m_w = 123456789;
-      const mask = 0xffffffff;
+    const renderLight = (x: number, z: number) => {
+      const lightX = x * cellSize + cellSize / 2;
+      const lightZ = z * cellSize + cellSize / 2;
+      const lightY = wallHeight - 0.3;
 
-      m_z = (36969 * (seed & 65535) + (seed >> 16)) & mask;
-      m_w = (18000 * (seed & 65535) + (seed >> 16)) & mask;
+      lightElements.push(
+        <group key={`ceiling-light-${x}-${z}`}>
+          <mesh position={[lightX, wallHeight - 0.1, lightZ]}>
+            <cylinderGeometry args={[0.15, 0.15, 0.2, 8]} />
+            <meshStandardMaterial color="#333333" />
+          </mesh>
 
-      return function () {
-        m_z = (36969 * (m_z & 65535) + (m_z >> 16)) & mask;
-        m_w = (18000 * (m_w & 65535) + (m_w >> 16)) & mask;
-        let result = ((m_z << 16) + (m_w & 65535)) >>> 0;
-        result /= 4294967296;
-        return result;
-      };
+          <mesh position={[lightX, wallHeight - 0.25, lightZ]}>
+            <sphereGeometry args={[0.08, 8, 6]} />
+            <meshStandardMaterial
+              color="#fff3cd"
+              emissive="#fff3cd"
+              emissiveIntensity={0.3}
+            />
+          </mesh>
+
+          <pointLight
+            position={[lightX, lightY, lightZ]}
+            intensity={2 + Math.sin(Date.now() * 0.01 + x * z) * 0.3}
+            distance={cellSize * 3}
+            decay={2}
+            color="#fff3cd"
+            castShadow={false}
+          />
+        </group>
+      );
     };
 
-    const random = seededRandom(seed); // Use same seed as walls and doors
+    if (explicitLights) {
+      for (const key of explicitLights) {
+        const [xs, zs] = key.split(",");
+        const x = Number(xs);
+        const z = Number(zs);
+        if (x >= 0 && x < maze.length && z >= 0 && z < maze[0].length) {
+          renderLight(x, z);
+        }
+      }
+    } else {
+      const seededRandom = (seed: number): (() => number) => {
+        let m_z = 987654321;
+        let m_w = 123456789;
+        const mask = 0xffffffff;
 
-    for (let x = 0; x < maze.length; x += lightSpacing + Math.floor(random() * 5)) {
-      for (let z = 0; z < maze[0].length; z += lightSpacing + Math.floor(random() * 5)) {
-        // Skip if this position has walls (shouldn't happen in open areas but safety check)
-        if (x >= maze.length || z >= maze[0].length) continue;
+        m_z = (36969 * (seed & 65535) + (seed >> 16)) & mask;
+        m_w = (18000 * (seed & 65535) + (seed >> 16)) & mask;
 
-        const cell = maze[x][z];
-        // Only place lights in areas that aren't completely walled in
-        const wallCount = Object.values(cell.walls).filter(Boolean).length;
-        if (wallCount >= 3) continue; // Skip very enclosed areas
+        return function () {
+          m_z = (36969 * (m_z & 65535) + (m_z >> 16)) & mask;
+          m_w = (18000 * (m_w & 65535) + (m_w >> 16)) & mask;
+          let result = ((m_z << 16) + (m_w & 65535)) >>> 0;
+          result /= 4294967296;
+          return result;
+        };
+      };
 
-        const lightX = x * cellSize + cellSize / 2;
-        const lightZ = z * cellSize + cellSize / 2;
-        const lightY = wallHeight - 0.3;
+      const random = seededRandom(seed);
 
-        // Dim, flickering point lights
-        lightElements.push(
-          <group key={`ceiling-light-${x}-${z}`}>
-            {/* Light fixture model (simple hanging light) */}
-            <mesh position={[lightX, wallHeight - 0.1, lightZ]}>
-              <cylinderGeometry args={[0.15, 0.15, 0.2, 8]} />
-              <meshStandardMaterial color="#333333" />
-            </mesh>
+      for (let x = 0; x < maze.length; x += lightSpacing + Math.floor(random() * 5)) {
+        for (let z = 0; z < maze[0].length; z += lightSpacing + Math.floor(random() * 5)) {
+          if (x >= maze.length || z >= maze[0].length) continue;
 
-            {/* Light bulb */}
-            <mesh position={[lightX, wallHeight - 0.25, lightZ]}>
-              <sphereGeometry args={[0.08, 8, 6]} />
-              <meshStandardMaterial
-                color="#fff3cd"
-                emissive="#fff3cd"
-                emissiveIntensity={0.3}
-              />
-            </mesh>
+          const cell = maze[x][z];
+          const wallCount = Object.values(cell.walls).filter(Boolean).length;
+          if (wallCount >= 3) continue;
 
-            {/* Point light with flickering effect */}
-            <pointLight
-              position={[lightX, lightY, lightZ]}
-              intensity={2 + Math.sin(Date.now() * 0.01 + x * z) * 0.3} // Subtle flicker
-              distance={cellSize * 3}
-              decay={2}
-              color="#fff3cd" // Warm, slightly yellow light
-              castShadow={false} // Disable shadows for performance
-            />
-          </group>
-        );
+          renderLight(x, z);
+        }
       }
     }
 
     return lightElements;
-  }, [maze, cellSize, wallHeight, seed, lightSpacing]);
+  }, [maze, cellSize, wallHeight, seed, lightSpacing, explicitLights]);
 
   return <>{lights}</>;
 }
