@@ -1,6 +1,46 @@
-import { useMemo, type JSX } from 'react';
+import { useMemo, useEffect, useRef, type JSX } from 'react';
+import * as THREE from 'three';
 import { type MazeCell } from '../utils/mazeGenerator';
 import { type LevelConfig } from '../types/LevelConfig';
+import { useLevelTextures } from '../hooks/useLevelTextures';
+import { getTileSize } from '../utils/textureLoader';
+
+// MeshStandardMaterial only adds the USE_MAP / USE_NORMALMAP defines when the
+// shader is first compiled, so transitioning these from null → Texture after
+// mount needs an explicit needsUpdate or the texture binds but never appears.
+function SurfaceMaterial({
+  color,
+  map,
+  normalMap,
+  normalScale = 1,
+  roughness = 1,
+}: {
+  color: string;
+  map: THREE.Texture | null;
+  normalMap?: THREE.Texture | null;
+  normalScale?: number;
+  roughness?: number;
+}) {
+  const ref = useRef<THREE.MeshStandardMaterial>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.needsUpdate = true;
+  }, [map, normalMap]);
+  const scale = useMemo(
+    () => new THREE.Vector2(normalScale, normalScale),
+    [normalScale]
+  );
+  return (
+    <meshStandardMaterial
+      ref={ref}
+      color={color}
+      map={map}
+      normalMap={normalMap ?? undefined}
+      normalScale={scale}
+      roughness={roughness}
+      metalness={0}
+    />
+  );
+}
 
 interface Maze3DProps {
   maze: MazeCell[][];
@@ -26,11 +66,80 @@ function makeSeededRandom(seed: number): () => number {
 }
 
 export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors }: Maze3DProps) {
+  const textures = useLevelTextures(config);
+
+  const mazeWidth = maze.length * cellSize;
+  const mazeDepth = maze[0].length * cellSize;
+
+  // Repeat values are per-surface: each surface needs its own tiling factor
+  // because tileSize is in world units and surfaces have different dimensions.
+  // Normal maps tile alongside their colour map using the colour map's tile
+  // size when the normal map doesn't specify one of its own.
+  useEffect(() => {
+    if (textures.wall) {
+      const tile = getTileSize(config.wallTexture, cellSize);
+      textures.wall.repeat.set(cellSize / tile, wallHeight / tile);
+      textures.wall.needsUpdate = true;
+    }
+    if (textures.wallNormal) {
+      const tile = getTileSize(config.wallNormalMap, getTileSize(config.wallTexture, cellSize));
+      textures.wallNormal.repeat.set(cellSize / tile, wallHeight / tile);
+      textures.wallNormal.needsUpdate = true;
+    }
+    if (textures.floor) {
+      const tile = getTileSize(config.floorTexture, cellSize);
+      textures.floor.repeat.set(mazeWidth / tile, mazeDepth / tile);
+      textures.floor.needsUpdate = true;
+    }
+    if (textures.floorNormal) {
+      const tile = getTileSize(config.floorNormalMap, getTileSize(config.floorTexture, cellSize));
+      textures.floorNormal.repeat.set(mazeWidth / tile, mazeDepth / tile);
+      textures.floorNormal.needsUpdate = true;
+    }
+    if (textures.ceiling) {
+      const tile = getTileSize(config.ceilingTexture, cellSize);
+      textures.ceiling.repeat.set(mazeWidth / tile, mazeDepth / tile);
+      textures.ceiling.needsUpdate = true;
+    }
+    if (textures.ceilingNormal) {
+      const tile = getTileSize(config.ceilingNormalMap, getTileSize(config.ceilingTexture, cellSize));
+      textures.ceilingNormal.repeat.set(mazeWidth / tile, mazeDepth / tile);
+      textures.ceilingNormal.needsUpdate = true;
+    }
+  }, [
+    textures.wall,
+    textures.floor,
+    textures.ceiling,
+    textures.wallNormal,
+    textures.floorNormal,
+    textures.ceilingNormal,
+    config.wallTexture,
+    config.floorTexture,
+    config.ceilingTexture,
+    config.wallNormalMap,
+    config.floorNormalMap,
+    config.ceilingNormalMap,
+    cellSize,
+    wallHeight,
+    mazeWidth,
+    mazeDepth,
+  ]);
+
   const walls = useMemo(() => {
     const elements: JSX.Element[] = [];
     const random = makeSeededRandom(seed);
     // Separate stream for half-height so door randomisation is unaffected
     const halfRandom = makeSeededRandom(seed ^ 0xf00d);
+
+    const wallMaterial = (color: string) => (
+      <SurfaceMaterial
+        color={color}
+        map={textures.wall}
+        normalMap={textures.wallNormal}
+        normalScale={config.wallNormalScale ?? 1}
+        roughness={config.wallRoughness ?? 1}
+      />
+    );
 
     // Helper: render one wall segment (door or plain, full or half-height).
     // pos: center position  dims: [w, h, d] of a full-height plain wall
@@ -73,13 +182,13 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
         elements.push(
           <mesh key={`${key}-left`} position={[lx, wallHeight / 2, lz]}>
             <boxGeometry args={[frameW, wallHeight, frameD]} />
-            <meshStandardMaterial color={config.wallColor} />
+            {wallMaterial(config.wallColor)}
           </mesh>
         );
         elements.push(
           <mesh key={`${key}-right`} position={[rx, wallHeight / 2, rz]}>
             <boxGeometry args={[frameW, wallHeight, frameD]} />
-            <meshStandardMaterial color={config.wallColor} />
+            {wallMaterial(config.wallColor)}
           </mesh>
         );
 
@@ -89,7 +198,7 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
         elements.push(
           <mesh key={`${key}-top`} position={[px, wallHeight * 0.9, pz]}>
             <boxGeometry args={[topW, wallHeight * 0.2, topD]} />
-            <meshStandardMaterial color={config.wallColor} />
+            {wallMaterial(config.wallColor)}
           </mesh>
         );
 
@@ -103,14 +212,14 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
             userData={{ isDoor: true, position: { x: px, y: wallHeight / 2, z: pz } }}
           >
             <boxGeometry args={[doorW, wallHeight * 0.8, doorD]} />
-            <meshStandardMaterial color="#8B4513" />
+            <meshStandardMaterial color="#8B4513" roughness={0.7} metalness={0} />
           </mesh>
         );
       } else {
         elements.push(
           <mesh key={key} position={[px, py, pz]}>
             <boxGeometry args={[fullW, h, fullD]} />
-            <meshStandardMaterial color={color} />
+            {wallMaterial(color)}
           </mesh>
         );
       }
@@ -161,29 +270,63 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
     });
 
     return elements;
-  }, [maze, cellSize, wallHeight, seed, config, explicitDoors]);
+  }, [
+    maze,
+    cellSize,
+    wallHeight,
+    seed,
+    config,
+    explicitDoors,
+    textures.wall,
+    textures.wallNormal,
+  ]);
 
   const floor = useMemo(() => {
-    const mazeWidth = maze.length * cellSize;
-    const mazeDepth = maze[0].length * cellSize;
     return (
       <mesh position={[mazeWidth / 2, -0.1, mazeDepth / 2]}>
         <boxGeometry args={[mazeWidth, 0.2, mazeDepth]} />
-        <meshStandardMaterial color={config.floorColor} />
+        <SurfaceMaterial
+          color={config.floorColor}
+          map={textures.floor}
+          normalMap={textures.floorNormal}
+          normalScale={config.floorNormalScale ?? 1}
+          roughness={config.floorRoughness ?? 1}
+        />
       </mesh>
     );
-  }, [maze, cellSize, config.floorColor]);
+  }, [
+    mazeWidth,
+    mazeDepth,
+    config.floorColor,
+    config.floorNormalScale,
+    config.floorRoughness,
+    textures.floor,
+    textures.floorNormal,
+  ]);
 
   const ceiling = useMemo(() => {
-    const mazeWidth = maze.length * cellSize;
-    const mazeDepth = maze[0].length * cellSize;
     return (
       <mesh position={[mazeWidth / 2, wallHeight + 0.1, mazeDepth / 2]}>
         <boxGeometry args={[mazeWidth, 0.2, mazeDepth]} />
-        <meshStandardMaterial color={config.ceilingColor} />
+        <SurfaceMaterial
+          color={config.ceilingColor}
+          map={textures.ceiling}
+          normalMap={textures.ceilingNormal}
+          normalScale={config.ceilingNormalScale ?? 1}
+          roughness={config.ceilingRoughness ?? 1}
+        />
       </mesh>
     );
-  }, [maze, cellSize, wallHeight, config.ceilingColor]);
+  }, [
+    mazeWidth,
+    mazeDepth,
+    wallHeight,
+    config.ceilingColor,
+    config.ceilingNormalScale,
+    config.ceilingRoughness,
+    textures.ceiling,
+    textures.ceilingNormal,
+  ]);
 
   return (
     <group>

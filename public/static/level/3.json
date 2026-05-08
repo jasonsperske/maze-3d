@@ -1,0 +1,81 @@
+{
+  "wallColor": "#e6dfd3",
+  "floorColor": "#241915",
+  "ceilingColor": "#ece6d7",
+
+  "wallTexture": {
+    "type": "noise",
+    "algorithm": "fbm",
+    "scale": 6,
+    "size": 512,
+    "colors": ["#cfc6b6", "#efe8d8"],
+    "seed": 7,
+    "tileSize": 4
+  },
+  "wallNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "fbm",
+    "scale": 16,
+    "size": 512,
+    "seed": 7,
+    "strength": 3,
+    "tileSize": 4
+  },
+  "wallRoughness": 0.35,
+  "wallNormalScale": 1.6,
+
+  "floorTexture": {
+    "type": "layered-noise",
+    "size": 512,
+    "tileSize": 6,
+    "baseColor": "#3a2a1c",
+    "layers": [
+      { "algorithm": "fbm",    "scale": 3,  "seed": 3,  "color": "#1d1108", "blend": "multiply", "opacity": 0.85 },
+      { "algorithm": "worley", "scale": 10, "seed": 11, "color": "#0a0604", "blend": "multiply", "opacity": 0.65 },
+      { "algorithm": "perlin", "scale": 32, "seed": 19, "color": "#1a0d05", "blend": "overlay",  "opacity": 0.55 },
+      { "algorithm": "worley", "scale": 24, "seed": 41, "color": "#000000", "blend": "multiply", "opacity": 0.4  }
+    ]
+  },
+  "floorNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "worley",
+    "scale": 12,
+    "size": 512,
+    "seed": 23,
+    "strength": 2.5,
+    "tileSize": 6
+  },
+  "floorRoughness": 0.7,
+  "floorNormalScale": 1.2,
+
+  "ceilingTexture": {
+    "type": "noise",
+    "algorithm": "fbm",
+    "scale": 5,
+    "size": 256,
+    "colors": ["#d6cfbe", "#ece5d4"],
+    "seed": 13,
+    "tileSize": 8
+  },
+  "ceilingNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "fbm",
+    "scale": 10,
+    "size": 256,
+    "seed": 13,
+    "strength": 2,
+    "tileSize": 8
+  },
+  "ceilingRoughness": 1.0,
+  "ceilingNormalScale": 1.0,
+
+  "doorFrequency": 0.08,
+  "ambientLight": 0.04,
+  "lightSpacing": 8,
+  "lightStyle": "explorer",
+  "halfHeightPartitions": false,
+  "halfHeightColor": "#555555",
+  "halfHeightFrequency": 0.0,
+  "widerRooms": false,
+  "widerRoomFrequency": 0.0
+}

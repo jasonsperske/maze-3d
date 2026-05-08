@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Vector3, Euler } from "three";
+import { Vector3, Euler, ACESFilmicToneMapping } from "three";
 import { MazeGenerator, type MazeCell } from "../utils/mazeGenerator";
 import { Maze3D } from "./Maze3D";
 import { FirstPersonController } from "./FirstPersonController";
@@ -12,6 +12,7 @@ import { type DoorCollisionContext } from "../handlers/types";
 import { type LevelConfig } from "../types/LevelConfig";
 import { getShaderComponent } from "../shaders";
 import { type ParsedMap, directionToRotationY } from "../utils/asciiMapParser";
+import { placeLights } from "../utils/lightPlacement";
 
 interface MazeGameProps {
   config: LevelConfig;
@@ -259,38 +260,26 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
     }
   }, []);
 
-  // Mirror CeilingLights' deterministic placement to know where lights are in world space.
-  const lightPositions = useMemo(() => {
-    const positions: Array<{ x: number; y: number; z: number }> = [];
+  // Use the same placement util that CeilingLights uses so proximity tracking
+  // (and therefore the flashlight fade) stays in sync with what's drawn.
+  const lightFixtures = useMemo(
+    () =>
+      placeLights(
+        maze,
+        cellSize,
+        wallHeight,
+        seed,
+        config.lightStyle ?? "ceiling-pendant",
+        config.lightSpacing,
+        mapData?.lights
+      ),
+    [maze, cellSize, wallHeight, seed, config.lightStyle, config.lightSpacing, mapData]
+  );
 
-    if (mapData) {
-      for (const key of mapData.lights) {
-        const [xs, zs] = key.split(",");
-        const x = Number(xs);
-        const z = Number(zs);
-        positions.push({
-          x: x * cellSize + cellSize / 2,
-          y: wallHeight - 0.3,
-          z: z * cellSize + cellSize / 2,
-        });
-      }
-      return positions;
-    }
-
-    const random = makeSeededRandom(seed);
-    for (let x = 0; x < maze.length; x += config.lightSpacing + Math.floor(random() * 5)) {
-      for (let z = 0; z < maze[0].length; z += config.lightSpacing + Math.floor(random() * 5)) {
-        if (x >= maze.length || z >= maze[0].length) continue;
-        if (Object.values(maze[x][z].walls).filter(Boolean).length >= 3) continue;
-        positions.push({
-          x: x * cellSize + cellSize / 2,
-          y: wallHeight - 0.3,
-          z: z * cellSize + cellSize / 2,
-        });
-      }
-    }
-    return positions;
-  }, [maze, seed, config.lightSpacing, cellSize, wallHeight, mapData]);
+  const lightPositions = useMemo(
+    () => lightFixtures.map((f) => f.position),
+    [lightFixtures]
+  );
 
   // Exponential proximity to nearest light — updated every render since playerPosition is state.
   const proximityRef = useRef(0);
@@ -332,14 +321,8 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       });
 
       const lightMap = new Set<string>();
-      const lightRandom = makeSeededRandom(seed);
-      for (let x = 0; x < maze.length; x += config.lightSpacing + Math.floor(lightRandom() * 5)) {
-        for (let z = 0; z < maze[0].length; z += config.lightSpacing + Math.floor(lightRandom() * 5)) {
-          if (x >= maze.length || z >= maze[0].length) continue;
-          const cell = maze[x][z];
-          if (Object.values(cell.walls).filter(Boolean).length >= 3) continue;
-          lightMap.add(`${x},${z}`);
-        }
+      for (const f of lightFixtures) {
+        lightMap.add(`${f.cell.x},${f.cell.z}`);
       }
 
       output += "+";
@@ -405,7 +388,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       console.log(output);
       return "Maze printed to console! (^v<> = your position & direction, # = doors, . = lights)";
     },
-    [playerPosition, cellSize, seed, cameraRotation.y, config.doorFrequency, config.lightSpacing]
+    [playerPosition, cellSize, seed, cameraRotation.y, config.doorFrequency, lightFixtures]
   );
 
   const letMeOutOfHere = useCallback(() => {
@@ -459,6 +442,11 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           position: [initialPosition.x, initialPosition.y, initialPosition.z],
           fov: 75,
         }}
+        gl={{
+          antialias: true,
+          toneMapping: ACESFilmicToneMapping,
+          toneMappingExposure: 1.1,
+        }}
         style={{ width: "100%", height: "100%" }}
       >
         {(() => {
@@ -474,6 +462,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           wallHeight={wallHeight}
           seed={seed}
           lightSpacing={config.lightSpacing}
+          lightStyle={config.lightStyle ?? "ceiling-pendant"}
           explicitLights={mapData?.lights}
         />
         <Maze3D

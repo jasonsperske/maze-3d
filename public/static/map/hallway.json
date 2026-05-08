@@ -5,9 +5,11 @@
   "ambientLight": 0.5,
   "doorFrequency": 0,
   "lightSpacing": 3,
+  "lightStyle": "fluorescent",
   "halfHeightPartitions": false,
   "halfHeightColor": "#7c8a9c",
   "halfHeightFrequency": 0,
   "widerRooms": false,
-  "widerRoomFrequency": 0
+  "widerRoomFrequency": 0,
+  "shader": "vhs"
 }

@@ -5,6 +5,7 @@
   "doorFrequency": 0.05,
   "ambientLight": 0.6,
   "lightSpacing": 3,
+  "lightStyle": "fluorescent",
   "halfHeightPartitions": false,
   "halfHeightColor": "#d4c97a",
   "halfHeightFrequency": 0.0,
