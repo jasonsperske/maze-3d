@@ -4,8 +4,10 @@ import type {
   ImageTextureSpec,
   NoiseTextureSpec,
   LayeredNoiseTextureSpec,
+  GridTextureSpec,
   NormalMapSpec,
   NormalNoiseTextureSpec,
+  NoiseScale,
 } from "../types/LevelConfig";
 import { makePerlin, makeFbm, makeWorley } from "./noise";
 
@@ -15,16 +17,19 @@ const DEFAULT_NOISE_SCALE = 4;
 
 type NoiseAlgorithm = "perlin" | "fbm" | "worley";
 
-function makeSampler(algorithm: NoiseAlgorithm, seed: number, scale: number) {
-  if (algorithm === "perlin") return makePerlin(seed, scale);
-  if (algorithm === "fbm") return makeFbm(seed, scale);
-  return makeWorley(seed, scale);
+function makeSampler(algorithm: NoiseAlgorithm, seed: number, scale: NoiseScale) {
+  const [sx, sy] = Array.isArray(scale) ? scale : [scale, scale];
+  if (algorithm === "perlin") return makePerlin(seed, sx, sy);
+  if (algorithm === "fbm") return makeFbm(seed, sx, sy);
+  // Worley is isotropic — anisotropic cells would need jitter-space warping.
+  return makeWorley(seed, sx);
 }
 
 export async function loadTextureFromSpec(spec: TextureSpec): Promise<THREE.Texture> {
   let tex: THREE.Texture;
   if (spec.type === "image") tex = await loadImageTexture(spec);
   else if (spec.type === "noise") tex = generateNoiseTexture(spec);
+  else if (spec.type === "grid") tex = generateGridTexture(spec);
   else tex = generateLayeredNoiseTexture(spec);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -134,12 +139,18 @@ function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec): THREE.Textu
     const opacity = layer.opacity ?? 1;
     const blend = layer.blend ?? "multiply";
     const color = hexToRgb(layer.color);
+    const fade = layer.verticalFade;
 
     for (let y = 0; y < size; y++) {
+      // Canvas row 0 is the top of the texture; with the default flipY that is
+      // also the top of a wall, so verticalFade reads [top, bottom].
+      const fadeMul = fade
+        ? fade[0] + (fade[1] - fade[0]) * (y / (size - 1))
+        : 1;
       for (let x = 0; x < size; x++) {
         const u = x / size;
         const v = y / size;
-        const t = Math.max(0, Math.min(1, sample(u, v))) * opacity;
+        const t = Math.max(0, Math.min(1, sample(u, v))) * opacity * fadeMul;
         if (t <= 0) continue;
         const idx = (y * size + x) * 4;
         const r = data[idx];
@@ -153,6 +164,55 @@ function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec): THREE.Textu
     }
   }
   ctx.putImageData(imageData, 0, 0);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
+  const size = spec.size ?? 512;
+  const cells = Math.max(1, spec.cells ?? 4);
+  const lineWidth = spec.lineWidth ?? 2;
+  const base = hexToRgb(spec.baseColor);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2D canvas context unavailable");
+
+  ctx.fillStyle = spec.baseColor;
+  ctx.fillRect(0, 0, size, size);
+
+  // Optional fbm mottling so the tiles read as aged fibre, not flat vector fill
+  if (spec.mottle && spec.mottle > 0) {
+    const mottleColor = hexToRgb(
+      spec.mottleColor ??
+        `#${[base.r, base.g, base.b]
+          .map((c) => Math.round(c * 0.8).toString(16).padStart(2, "0"))
+          .join("")}`
+    );
+    const sample = makeFbm(spec.seed ?? 1, cells * 2);
+    const imageData = ctx.getImageData(0, 0, size, size);
+    const data = imageData.data;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const t = Math.max(0, Math.min(1, sample(x / size, y / size))) * spec.mottle;
+        const idx = (y * size + x) * 4;
+        data[idx] = clamp255(data[idx] + (mottleColor.r - data[idx]) * t);
+        data[idx + 1] = clamp255(data[idx + 1] + (mottleColor.g - data[idx + 1]) * t);
+        data[idx + 2] = clamp255(data[idx + 2] + (mottleColor.b - data[idx + 2]) * t);
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Grid lines drawn at the leading edge of each cell only, so the pattern
+  // tiles without doubled lines at the seam.
+  ctx.fillStyle = spec.lineColor;
+  for (let i = 0; i < cells; i++) {
+    const p = Math.round((i * size) / cells);
+    ctx.fillRect(p, 0, lineWidth, size);
+    ctx.fillRect(0, p, size, lineWidth);
+  }
+
   return new THREE.CanvasTexture(canvas);
 }
 

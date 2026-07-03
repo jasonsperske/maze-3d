@@ -11,7 +11,9 @@ export type LightFixture =
   | { kind: "ceiling-pendant"; cell: Cell; position: Vec3 }
   | { kind: "fluorescent";     cell: Cell; position: Vec3 }
   | { kind: "floor-lamp";      cell: Cell; position: Vec3; direction: Vec3 }
-  | { kind: "corner-spot";     cell: Cell; position: Vec3; direction: Vec3 };
+  | { kind: "corner-spot";     cell: Cell; position: Vec3; direction: Vec3 }
+  | { kind: "wall-sconce";     cell: Cell; position: Vec3; direction: Vec3 }
+  | { kind: "ceiling-sconce";  cell: Cell; position: Vec3 };
 
 function makeSeededRandom(seed: number): () => number {
   const mask = 0xffffffff;
@@ -35,7 +37,9 @@ export function placeLights(
   seed: number,
   style: LightStyle,
   spacing: number,
-  explicitCells?: Set<string>
+  explicitCells?: Set<string>,
+  // Exact stride grid: no jitter, no dead-end skipping — office regularity.
+  regular = false
 ): LightFixture[] {
   const out: LightFixture[] = [];
   const random = makeSeededRandom(seed);
@@ -62,11 +66,19 @@ export function placeLights(
       }
     }
   } else {
-    // ceiling-pendant / fluorescent: deterministic stride scan, skip near-dead-end cells.
-    for (let x = 0; x < maze.length; x += spacing + Math.floor(random() * 5)) {
-      for (let z = 0; z < maze[0].length; z += spacing + Math.floor(random() * 5)) {
+    // ceiling-pendant / fluorescent / wall-sconce: deterministic stride scan.
+    // Ceiling styles skip near-dead-end cells; sconces need a wall to mount on,
+    // so they accept corridor cells and only skip fully sealed pockets.
+    const jitter = () => (regular ? 0 : Math.floor(random() * 5));
+    for (let x = 0; x < maze.length; x += spacing + jitter()) {
+      for (let z = 0; z < maze[0].length; z += spacing + jitter()) {
         if (x >= maze.length || z >= maze[0].length) continue;
-        if (Object.values(maze[x][z].walls).filter(Boolean).length >= 3) continue;
+        const wallCount = Object.values(maze[x][z].walls).filter(Boolean).length;
+        if (style === "wall-sconce") {
+          if (wallCount === 0 || wallCount >= 4) continue;
+        } else if (!regular && wallCount >= 3) {
+          continue;
+        }
         cells.push({ x, z });
       }
     }
@@ -94,6 +106,40 @@ export function placeLights(
         kind: style,
         cell: { x, z },
         position: { x: cx, y: wallHeight - 0.3, z: cz },
+      });
+      continue;
+    }
+
+    if (style === "wall-sconce") {
+      // Mount on a random present wall, high up, aimed into the room.
+      const mounts = [
+        { dir: "north" as const, nx: 0, nz: -1 },
+        { dir: "south" as const, nx: 0, nz: 1 },
+        { dir: "east" as const,  nx: 1, nz: 0 },
+        { dir: "west" as const,  nx: -1, nz: 0 },
+      ].filter((m) => maze[x][z].walls[m.dir]);
+      // Some fixtures hang flush from the ceiling instead: occasionally for
+      // variety, and always when the cell has no wall to mount on.
+      const wantCeiling = random() < 0.25;
+      if (mounts.length === 0 || wantCeiling) {
+        out.push({
+          kind: "ceiling-sconce",
+          cell: { x, z },
+          position: { x: cx, y: wallHeight - 0.16, z: cz },
+        });
+        continue;
+      }
+      const m = mounts[Math.floor(random() * mounts.length)];
+      const inset = 0.28; // shade sits just off the wall face
+      out.push({
+        kind: "wall-sconce",
+        cell: { x, z },
+        position: {
+          x: cx + m.nx * (cellSize / 2 - inset),
+          y: wallHeight * 0.74,
+          z: cz + m.nz * (cellSize / 2 - inset),
+        },
+        direction: { x: -m.nx, y: 0, z: -m.nz },
       });
       continue;
     }

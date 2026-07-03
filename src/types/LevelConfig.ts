@@ -9,11 +9,16 @@ export type ImageTextureSpec = {
   tileSize?: number;
 };
 
+// `scale` may be a single number or an [x, y] pair for anisotropic noise —
+// e.g. [26, 4] varies fast horizontally and slowly vertically, reading as
+// vertical stripes (wallpaper, wood grain). Worley ignores the y component.
+export type NoiseScale = number | [number, number];
+
 export type NoiseTextureSpec = {
   type: "noise";
   algorithm: "perlin" | "fbm" | "worley";
   size?: number;       // canvas resolution (px), default 256
-  scale?: number;      // noise frequency in tiles per texture
+  scale?: NoiseScale;  // noise frequency in tiles per texture
   colors?: [string, string]; // gradient endpoints, default ["#000","#fff"]
   seed?: number;
   tileSize?: number;
@@ -29,11 +34,16 @@ export type LayeredNoiseTextureSpec = {
   baseColor: string;
   layers: Array<{
     algorithm: "perlin" | "fbm" | "worley";
-    scale: number;
+    scale: NoiseScale;
     seed?: number;
     color: string;
     blend?: "multiply" | "overlay" | "screen";
     opacity?: number; // 0–1, default 1
+    // Multiplies the layer's opacity by a vertical gradient: [top, bottom] of
+    // the texture. On walls, one vertical repeat spans the full wall when
+    // tileSize equals the wall height, so [0, 1] concentrates grime at the
+    // floor and [1, 0] shades the ceiling line.
+    verticalFade?: [number, number];
   }>;
 };
 
@@ -45,16 +55,33 @@ export type NormalNoiseTextureSpec = {
   type: "normal-noise";
   algorithm: "perlin" | "fbm" | "worley";
   size?: number;
-  scale?: number;
+  scale?: NoiseScale;
   seed?: number;
   strength?: number; // default 2
   tileSize?: number;
 };
 
+// Regular grid of recessed lines over a flat base — suspended-ceiling tiles,
+// linoleum, etc. `cells` lines per tile; optional fbm mottling dirties the
+// base so it doesn't read as a perfect vector pattern.
+export type GridTextureSpec = {
+  type: "grid";
+  size?: number;
+  tileSize?: number;
+  baseColor: string;
+  lineColor: string;
+  cells?: number;       // grid cells per tile, default 4
+  lineWidth?: number;   // line thickness in px, default 2
+  mottle?: number;      // 0–1 fbm mottle opacity, default 0
+  mottleColor?: string; // default a darker version of baseColor
+  seed?: number;
+};
+
 export type TextureSpec =
   | ImageTextureSpec
   | NoiseTextureSpec
-  | LayeredNoiseTextureSpec;
+  | LayeredNoiseTextureSpec
+  | GridTextureSpec;
 
 export type NormalMapSpec = NormalNoiseTextureSpec;
 
@@ -63,13 +90,36 @@ export type NormalMapSpec = NormalNoiseTextureSpec;
 //   fluorescent:     cool rectangular ceiling panel — office building
 //   explorer:        mix of warm corner-mounted spots and floor lanterns,
 //                    placed irregularly as if dropped while exploring
-export type LightStyle = "ceiling-pendant" | "fluorescent" | "explorer";
+//   wall-sconce:     cold cylindrical fixtures mounted high on walls — dim
+//                    residential hallway, pools of light on the wall below.
+//                    Occasionally mixes in a flush ceiling drum variant, and
+//                    falls back to it in cells with no wall to mount on.
+export type LightStyle =
+  | "ceiling-pendant"
+  | "fluorescent"
+  | "explorer"
+  | "wall-sconce";
+
+// Open-plan post-processing applied after maze generation: carve large
+// clearings, thin the remaining walls out so isolated partition segments are
+// left standing, and place freestanding columns at fully open junctions.
+// Produces office/basement liminal space instead of corridors.
+export interface OpenPlanConfig {
+  clearings: number;             // number of large open areas to carve
+  clearingSize: [number, number]; // clearing half-extent range, in cells
+  wallRemoval: number;           // 0–1 chance each remaining interior wall is removed
+  pillarFrequency: number;       // 0–1 chance an open junction hosts a column
+  pillarSize?: number;           // column footprint in world units, default 0.5
+}
 
 export interface LevelConfig {
   // Visuals
   wallColor: string;
   floorColor: string;
   ceilingColor: string;
+  // Room height in world units, default 3. Low values (~2.5) read as
+  // office/basement space.
+  wallHeight?: number;
   wallTexture?: TextureSpec;
   floorTexture?: TextureSpec;
   ceilingTexture?: TextureSpec;
@@ -90,9 +140,15 @@ export interface LevelConfig {
   doorFrequency: number; // 0–1 probability per wall
 
   // Lighting
+  // Player flashlight intensity multiplier, default 1. Set 0 for levels that
+  // are fully lit — the beam hotspot looks wrong in bright space.
+  flashlight?: number;
   ambientLight: number; // three.js ambient intensity
   lightSpacing: number; // base cell stride between lights (higher = fewer)
   lightStyle?: LightStyle; // default "ceiling-pendant"
+  // Place lights on an exact stride grid (no jitter, no dead-end skipping) —
+  // the relentless regularity of office fluorescents.
+  lightGrid?: boolean;
 
   // Half-height partitions: walls the camera can see over but the player can't walk through
   halfHeightPartitions: boolean;
@@ -102,6 +158,22 @@ export interface LevelConfig {
   // Wider rooms: randomly remove internal walls post-generation so some areas open up
   widerRooms: boolean;
   widerRoomFrequency: number; // 0–1 probability that each internal wall is removed
+
+  // Open-plan generation pass (see OpenPlanConfig). Supersedes widerRooms
+  // when both are set: widerRooms runs first, then this.
+  openPlan?: OpenPlanConfig;
+
+  // Exponential-squared fog: distant corridors sink into `color` instead of
+  // rendering crisply forever. Density ~0.05–0.1 for a cellSize-4 maze.
+  fog?: { color: string; density: number };
+
+  // Baseboard + crown moulding strips rendered along full-height walls.
+  // `crown` defaults to true; set false for baseboard-only (drop ceilings).
+  trim?: { color: string; roughness?: number; crown?: boolean };
+
+  // Framed pictures hung on wall faces. `frequency` is the 0–1 probability
+  // per face of each full-height plain wall (doors and half-walls are skipped).
+  pictures?: { frequency: number; frameColor?: string };
 
   // Post-processing shader applied over the whole canvas, e.g. "vhs"
   shader?: string;

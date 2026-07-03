@@ -21,21 +21,24 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// Tileable value noise. `period` is the integer grid size that the noise repeats over.
-function makeValueNoise(seed: number, period: number) {
+// Tileable value noise. `periodX`/`periodY` are the integer grid sizes the
+// noise repeats over on each axis; unequal periods stretch the pattern into
+// stripes (e.g. fast-x / slow-y reads as vertical wallpaper banding).
+function makeValueNoise(seed: number, periodX: number, periodY: number) {
   const h = hash2(seed);
-  const p = Math.max(1, Math.floor(period));
+  const px = Math.max(1, Math.floor(periodX));
+  const py = Math.max(1, Math.floor(periodY));
   return (u: number, v: number): number => {
-    const x = u * p;
-    const y = v * p;
+    const x = u * px;
+    const y = v * py;
     const xi = Math.floor(x);
     const yi = Math.floor(y);
     const xf = x - xi;
     const yf = y - yi;
-    const x0 = ((xi % p) + p) % p;
-    const y0 = ((yi % p) + p) % p;
-    const x1 = (x0 + 1) % p;
-    const y1 = (y0 + 1) % p;
+    const x0 = ((xi % px) + px) % px;
+    const y0 = ((yi % py) + py) % py;
+    const x1 = (x0 + 1) % px;
+    const y1 = (y0 + 1) % py;
     const a = h(x0, y0);
     const b = h(x1, y0);
     const c = h(x0, y1);
@@ -46,15 +49,15 @@ function makeValueNoise(seed: number, period: number) {
   };
 }
 
-export function makePerlin(seed: number, scale: number) {
-  return makeValueNoise(seed, scale);
+export function makePerlin(seed: number, scaleX: number, scaleY = scaleX) {
+  return makeValueNoise(seed, scaleX, scaleY);
 }
 
 // Fractal Brownian motion: sum of octaves of value noise, each at double frequency
 // and half amplitude. Produces a richer cloudy pattern good for stone/wood.
-export function makeFbm(seed: number, scale: number, octaves = 4) {
+export function makeFbm(seed: number, scaleX: number, scaleY = scaleX, octaves = 4) {
   const layers = Array.from({ length: octaves }, (_, i) =>
-    makeValueNoise(seed + i * 1013, scale * Math.pow(2, i))
+    makeValueNoise(seed + i * 1013, scaleX * Math.pow(2, i), scaleY * Math.pow(2, i))
   );
   let norm = 0;
   for (let i = 0; i < octaves; i++) norm += Math.pow(0.5, i);

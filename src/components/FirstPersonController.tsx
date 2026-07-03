@@ -2,10 +2,12 @@ import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Vector3, Euler, Raycaster, Vector2, Box3 } from "three";
 import { type MazeCell } from "../utils/mazeGenerator";
+import { type Pillar } from "../utils/openPlan";
 
 interface FirstPersonControllerProps {
   maze: MazeCell[][];
   cellSize: number;
+  pillars?: Pillar[];
   position: Vector3;
   initialRotation?: Euler;
   onPositionChange: (position: Vector3) => void;
@@ -16,6 +18,7 @@ interface FirstPersonControllerProps {
 export function FirstPersonController({
   maze,
   cellSize,
+  pillars,
   position,
   initialRotation,
   onPositionChange,
@@ -192,6 +195,19 @@ export function FirstPersonController({
     if (cell.walls.south && localZ > cellSize - buffer) return true;
     if (cell.walls.west && localX < buffer) return true;
     if (cell.walls.east && localX > cellSize - buffer) return true;
+
+    // Freestanding open-plan columns (axis-aligned boxes)
+    if (pillars) {
+      for (const p of pillars) {
+        const half = p.size / 2 + buffer;
+        if (
+          Math.abs(newPosition.x - p.x) < half &&
+          Math.abs(newPosition.z - p.z) < half
+        ) {
+          return true;
+        }
+      }
+    }
 
     return false;
   };

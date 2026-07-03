@@ -13,6 +13,7 @@ import { type LevelConfig } from "../types/LevelConfig";
 import { getShaderComponent } from "../shaders";
 import { type ParsedMap, directionToRotationY } from "../utils/asciiMapParser";
 import { placeLights } from "../utils/lightPlacement";
+import { applyOpenPlan, type Pillar } from "../utils/openPlan";
 
 interface MazeGameProps {
   config: LevelConfig;
@@ -49,14 +50,19 @@ function makeSeededRandom(seed: number): () => number {
 
 export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: MazeGameProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [cameraRotation, setCameraRotation] = useState(
-    new Euler(0, 0, 0, "YXZ")
-  );
+  // Camera rotation lives in a ref, not state: the controller reports it on
+  // every mousemove (hundreds/sec on fast mice), and pushing a fresh Euler
+  // into state re-rendered the whole component tree per event — visible as
+  // stutter while turning. Nothing needs rotation at render time; consumers
+  // (saveState, door collisions, ASCII map) read the ref when called.
+  const cameraRotationRef = useRef(new Euler(0, 0, 0, "YXZ"));
   const [forceReload, setForceReload] = useState(0);
-  const [flashlightIntensity, setFlashlightIntensity] = useState(1);
+  const [flashlightIntensity, setFlashlightIntensity] = useState(
+    () => config.flashlight ?? 1
+  );
 
   const cellSize = 4;
-  const wallHeight = 3;
+  const wallHeight = config.wallHeight ?? 3;
   const isMapMode = !!mapData;
 
   const { seed, initialPosition, initialRotation } = useMemo(() => {
@@ -125,8 +131,8 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
     };
   }, [forceReload, seedProp, mapName, mapData]);
 
-  const maze = useMemo(() => {
-    if (mapData) return mapData.grid;
+  const { maze, pillars } = useMemo(() => {
+    if (mapData) return { maze: mapData.grid, pillars: [] as Pillar[] };
 
     const generator = new MazeGenerator(25, 25, seed);
     const grid = generator.generate();
@@ -151,35 +157,36 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       });
     }
 
-    return grid;
-  }, [seed, mapData, config.widerRooms, config.widerRoomFrequency]);
+    const pillars = config.openPlan
+      ? applyOpenPlan(grid, seed ^ 0xb00c, config.openPlan, cellSize)
+      : [];
+
+    return { maze: grid, pillars };
+  }, [seed, mapData, config.widerRooms, config.widerRoomFrequency, config.openPlan]);
 
   const [playerPosition, setPlayerPosition] = useState(initialPosition);
 
   useEffect(() => {
-    if (initialRotation) setCameraRotation(initialRotation);
+    if (initialRotation) cameraRotationRef.current = initialRotation;
   }, [initialRotation]);
 
-  const handlePositionChange = useCallback((position: Vector3) => {
-    setPlayerPosition(position);
-  }, []);
-
   const handleRotationChange = useCallback((rotation: Euler) => {
-    setCameraRotation(rotation);
+    cameraRotationRef.current = rotation;
   }, []);
 
   const saveState = useCallback(() => {
+    const rotation = cameraRotationRef.current;
     const state = {
       seed,
       position: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
-      rotation: { x: cameraRotation.x, y: cameraRotation.y, z: cameraRotation.z },
+      rotation: { x: rotation.x, y: rotation.y, z: rotation.z },
     };
     const path = isMapMode
       ? `/map/${mapName}`
       : `/level/${level}/${seedProp}`;
     const url = `${window.location.origin}${path}?hash=${btoa(JSON.stringify(state))}`;
     window.location.href = url;
-  }, [seed, playerPosition, cameraRotation, level, seedProp, mapName, isMapMode]);
+  }, [seed, playerPosition, level, seedProp, mapName, isMapMode]);
 
   const letThereBeLight = useCallback((factor: number = 1) => {
     setFlashlightIntensity(factor);
@@ -242,12 +249,12 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       const context: DoorCollisionContext = {
         seed,
         playerPosition: { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z },
-        cameraRotationY: cameraRotation.y,
+        cameraRotationY: cameraRotationRef.current.y,
         doorId,
       };
       apiDoorCollision(doorPosition, wallNormalAngle, context);
     },
-    [seed, playerPosition, cameraRotation, doorIdMap]
+    [seed, playerPosition, doorIdMap]
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -271,9 +278,10 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
         seed,
         config.lightStyle ?? "ceiling-pendant",
         config.lightSpacing,
-        mapData?.lights
+        mapData?.lights,
+        config.lightGrid
       ),
-    [maze, cellSize, wallHeight, seed, config.lightStyle, config.lightSpacing, mapData]
+    [maze, cellSize, wallHeight, seed, config.lightStyle, config.lightSpacing, config.lightGrid, mapData]
   );
 
   const lightPositions = useMemo(
@@ -281,19 +289,27 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
     [lightFixtures]
   );
 
-  // Exponential proximity to nearest light — updated every render since playerPosition is state.
+  // Exponential proximity to nearest light. Recomputed in the per-frame
+  // position callback: the controller mutates a single Vector3 in place, so
+  // the state reference never changes and any render-time memo keyed on it
+  // would go stale after the first frame.
   const proximityRef = useRef(0);
-  proximityRef.current = useMemo(() => {
-    let minDistSq = Infinity;
-    for (const lp of lightPositions) {
-      const dx = playerPosition.x - lp.x;
-      const dy = playerPosition.y - lp.y;
-      const dz = playerPosition.z - lp.z;
-      const dSq = dx * dx + dy * dy + dz * dz;
-      if (dSq < minDistSq) minDistSq = dSq;
-    }
-    return lightPositions.length > 0 ? Math.exp(-Math.sqrt(minDistSq) * 0.18) : 0;
-  }, [playerPosition, lightPositions]);
+  const handlePositionChange = useCallback(
+    (position: Vector3) => {
+      setPlayerPosition(position);
+      let minDistSq = Infinity;
+      for (const lp of lightPositions) {
+        const dx = position.x - lp.x;
+        const dy = position.y - lp.y;
+        const dz = position.z - lp.z;
+        const dSq = dx * dx + dy * dy + dz * dz;
+        if (dSq < minDistSq) minDistSq = dSq;
+      }
+      proximityRef.current =
+        lightPositions.length > 0 ? Math.exp(-Math.sqrt(minDistSq) * 0.18) : 0;
+    },
+    [lightPositions]
+  );
 
   const printMazeASCII = useCallback(
     (maze: MazeCell[][]) => {
@@ -350,7 +366,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           }
 
           if (x === playerMazeX && z === playerMazeZ) {
-            const yRotation = cameraRotation.y;
+            const yRotation = cameraRotationRef.current.y;
             const norm = ((yRotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
             let arrow;
             if (norm < Math.PI / 4 || norm >= (7 * Math.PI) / 4) arrow = "^";
@@ -388,7 +404,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       console.log(output);
       return "Maze printed to console! (^v<> = your position & direction, # = doors, . = lights)";
     },
-    [playerPosition, cellSize, seed, cameraRotation.y, config.doorFrequency, lightFixtures]
+    [playerPosition, cellSize, seed, config.doorFrequency, lightFixtures]
   );
 
   const letMeOutOfHere = useCallback(() => {
@@ -454,6 +470,9 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           const ShaderEffect = getShaderComponent(config.shader);
           return ShaderEffect ? <ShaderEffect proximityRef={proximityRef} /> : null;
         })()}
+        {config.fog && (
+          <fogExp2 attach="fog" args={[config.fog.color, config.fog.density]} />
+        )}
         <ambientLight intensity={config.ambientLight} />
         <Flashlight intensityMultiplier={flashlightIntensity} />
         <CeilingLights
@@ -463,6 +482,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           seed={seed}
           lightSpacing={config.lightSpacing}
           lightStyle={config.lightStyle ?? "ceiling-pendant"}
+          lightGrid={config.lightGrid}
           explicitLights={mapData?.lights}
         />
         <Maze3D
@@ -471,12 +491,14 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           wallHeight={wallHeight}
           seed={seed}
           config={config}
+          pillars={pillars}
           explicitDoors={mapData?.doors}
           onDoorCollision={handleDoorCollision}
         />
         <FirstPersonController
           maze={maze}
           cellSize={cellSize}
+          pillars={pillars}
           position={playerPosition}
           initialRotation={initialRotation}
           onPositionChange={handlePositionChange}
