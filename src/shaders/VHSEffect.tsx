@@ -66,6 +66,11 @@ const vhsShader = {
       color.r *= 1.08;
       color.g *= 0.98;
 
+      // Composer render targets are linear but the canvas expects sRGB;
+      // without this encode (three's OutputPass job) the frame displays
+      // ~2.2-gamma dark.
+      color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
+
       gl_FragColor = vec4(color, 1.0);
     }
   `,
@@ -73,9 +78,10 @@ const vhsShader = {
 
 interface VHSEffectProps {
   proximityRef: MutableRefObject<number>;
+  options?: Record<string, number>;
 }
 
-export function VHSEffect({ proximityRef }: VHSEffectProps) {
+export function VHSEffect({ proximityRef, options }: VHSEffectProps) {
   const { gl, scene, camera, size } = useThree();
   const vhsPassRef = useRef<ShaderPass | null>(null);
 
@@ -103,7 +109,8 @@ export function VHSEffect({ proximityRef }: VHSEffectProps) {
 
     pass.uniforms.time.value += delta;
     // proximityRef is updated each frame by MazeGame from deterministic light positions
-    pass.uniforms.distortion.value = 0.08 + proximityRef.current * 0.92;
+    pass.uniforms.distortion.value =
+      (0.08 + proximityRef.current * 0.92) * (options?.distortion ?? 1);
 
     composer.render();
   }, 1);

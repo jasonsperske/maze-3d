@@ -111,8 +111,8 @@ function CeilingPendant({
       {lit && (
         <pointLight
           position={[x, y, z]}
-          intensity={2 + jitter}
-          distance={cellSize * 3}
+          intensity={3.5 + jitter}
+          distance={cellSize * 3.5}
           decay={2}
           color="#fff3cd"
         />

@@ -1,13 +1,159 @@
 {
-  "wallColor": "#666666",
-  "floorColor": "#444444",
-  "ceilingColor": "#222222",
-  "doorFrequency": 0.1,
-  "ambientLight": 0.05,
-  "lightSpacing": 8,
+  "wallColor": "#e8e0cc",
+  "floorColor": "#e8dcc8",
+  "ceilingColor": "#cfc6b0",
+  "wallHeight": 3.2,
+  "wallTexture": {
+    "type": "layered-noise",
+    "size": 512,
+    "tileSize": 3.2,
+    "baseColor": "#9a8f72",
+    "layers": [
+      {
+        "algorithm": "perlin",
+        "scale": [
+          20,
+          2
+        ],
+        "seed": 11,
+        "color": "#79704f",
+        "blend": "multiply",
+        "opacity": 0.3
+      },
+      {
+        "algorithm": "fbm",
+        "scale": 7,
+        "seed": 19,
+        "color": "#a89c78",
+        "blend": "overlay",
+        "opacity": 0.4
+      },
+      {
+        "algorithm": "fbm",
+        "scale": 10,
+        "seed": 31,
+        "color": "#4a4132",
+        "blend": "multiply",
+        "opacity": 0.35,
+        "verticalFade": [
+          0.1,
+          0.95
+        ]
+      },
+      {
+        "algorithm": "fbm",
+        "scale": 14,
+        "seed": 43,
+        "color": "#5c5340",
+        "blend": "multiply",
+        "opacity": 0.22,
+        "verticalFade": [
+          0.9,
+          0.05
+        ]
+      }
+    ]
+  },
+  "wallNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "perlin",
+    "scale": [
+      22,
+      4
+    ],
+    "size": 512,
+    "seed": 11,
+    "strength": 1.5,
+    "tileSize": 3.2
+  },
+  "wallRoughness": 0.9,
+  "wallNormalScale": 0.8,
+  "floorTexture": {
+    "type": "grid",
+    "size": 512,
+    "tileSize": 3,
+    "baseColor": "#5a4028",
+    "lineColor": "#241708",
+    "cellsX": 10,
+    "cellsY": 1,
+    "lineWidth": 3,
+    "mottle": 0.45,
+    "mottleColor": "#3a2716",
+    "mottleScale": [
+      24,
+      3
+    ],
+    "seed": 7
+  },
+  "floorNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "fbm",
+    "scale": [
+      24,
+      3
+    ],
+    "size": 512,
+    "seed": 7,
+    "strength": 2,
+    "tileSize": 3
+  },
+  "floorRoughness": 0.5,
+  "floorNormalScale": 1.0,
+  "ceilingTexture": {
+    "type": "noise",
+    "algorithm": "fbm",
+    "scale": 6,
+    "size": 256,
+    "colors": [
+      "#a99f8a",
+      "#c4baa4"
+    ],
+    "seed": 13,
+    "tileSize": 8
+  },
+  "ceilingNormalMap": {
+    "type": "normal-noise",
+    "algorithm": "fbm",
+    "scale": 9,
+    "size": 256,
+    "seed": 13,
+    "strength": 1.5,
+    "tileSize": 8
+  },
+  "ceilingRoughness": 1.0,
+  "trim": {
+    "color": "#3e2e1e",
+    "roughness": 0.5
+  },
+  "pictures": {
+    "frequency": 0.22,
+    "frameColor": "#332417"
+  },
+  "fog": {
+    "color": "#070503",
+    "density": 0.045
+  },
+  "doorFrequency": 0.15,
+  "ambientLight": 0.4,
+  "lightSpacing": 5,
+  "lightStyle": "ceiling-pendant",
   "halfHeightPartitions": false,
   "halfHeightColor": "#555555",
   "halfHeightFrequency": 0.0,
   "widerRooms": false,
-  "widerRoomFrequency": 0.0
+  "widerRoomFrequency": 0.0,
+  "openPlan": {
+    "clearings": 3,
+    "clearingSize": [
+      1,
+      1
+    ],
+    "wallRemoval": 0.18,
+    "pillarFrequency": 0
+  },
+  "shader": "film",
+  "flashlight": 1,
+  "shaderOptions": {
+    "grain": 0.35
+  }
 }

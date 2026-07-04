@@ -53,13 +53,21 @@ const filmShader = {
       color *= vec3(0.94, 1.0, 0.9);
       color += vec3(0.012, 0.014, 0.011);
 
-      // Film grain — regenerated every frame, strongest in the shadows
-      float n = rand(vUv * 1.37 + fract(time * 61.7));
-      color += (n - 0.5) * grainAmount * (1.0 - luma);
-
       // Heavy lens vignette
       vec2 vc = vUv * (1.0 - vUv.yx);
       color *= clamp(pow(vc.x * vc.y * 20.0, 0.45), 0.0, 1.0);
+
+      // Composer render targets are linear but the canvas expects sRGB;
+      // without this encode (three's OutputPass job) the frame displays
+      // ~2.2-gamma dark.
+      color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
+
+      // Film grain — added in display space so its amplitude is perceptually
+      // uniform; added before the encode it exploded in the blacks. Still
+      // biased toward the shadows, like a camera gaining up.
+      float n = rand(vUv * 1.37 + fract(time * 61.7));
+      float shade = dot(color, vec3(0.299, 0.587, 0.114));
+      color += (n - 0.5) * grainAmount * (1.0 - shade * 0.7);
 
       gl_FragColor = vec4(color, 1.0);
     }
@@ -68,9 +76,10 @@ const filmShader = {
 
 interface FilmEffectProps {
   proximityRef: MutableRefObject<number>;
+  options?: Record<string, number>;
 }
 
-export function FilmEffect({ proximityRef }: FilmEffectProps) {
+export function FilmEffect({ proximityRef, options }: FilmEffectProps) {
   const { gl, scene, camera, size } = useThree();
   const passRef = useRef<ShaderPass | null>(null);
 
@@ -97,8 +106,10 @@ export function FilmEffect({ proximityRef }: FilmEffectProps) {
     if (!pass) return;
 
     pass.uniforms.time.value += delta;
-    // Grain thickens away from light sources — the camera "gains up" in the dark.
-    pass.uniforms.grainAmount.value = 0.08 + (1 - proximityRef.current) * 0.08;
+    // Grain thickens away from light sources — the camera "gains up" in the
+    // dark. Levels scale it via shaderOptions.grain. Display-space amplitude.
+    pass.uniforms.grainAmount.value =
+      (0.035 + (1 - proximityRef.current) * 0.03) * (options?.grain ?? 1);
 
     composer.render();
   }, 1);

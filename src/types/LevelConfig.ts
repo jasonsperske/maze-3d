@@ -62,8 +62,10 @@ export type NormalNoiseTextureSpec = {
 };
 
 // Regular grid of recessed lines over a flat base — suspended-ceiling tiles,
-// linoleum, etc. `cells` lines per tile; optional fbm mottling dirties the
-// base so it doesn't read as a perfect vector pattern.
+// linoleum, floorboards. `cells` lines per tile (override per axis with
+// cellsX/cellsY; 0 disables that axis, so cellsX only = plank seams).
+// Optional fbm mottling dirties the base; an anisotropic mottleScale
+// stretches it into grain running along the boards.
 export type GridTextureSpec = {
   type: "grid";
   size?: number;
@@ -71,9 +73,12 @@ export type GridTextureSpec = {
   baseColor: string;
   lineColor: string;
   cells?: number;       // grid cells per tile, default 4
+  cellsX?: number;      // vertical lines per tile, default `cells`
+  cellsY?: number;      // horizontal lines per tile, default `cells`
   lineWidth?: number;   // line thickness in px, default 2
   mottle?: number;      // 0–1 fbm mottle opacity, default 0
   mottleColor?: string; // default a darker version of baseColor
+  mottleScale?: NoiseScale; // default cells * 2
   seed?: number;
 };
 
@@ -177,6 +182,10 @@ export interface LevelConfig {
 
   // Post-processing shader applied over the whole canvas, e.g. "vhs"
   shader?: string;
+  // Per-level tuning knobs passed to the shader. Supported keys:
+  //   film: grain (multiplier, default 1)
+  //   vhs:  distortion (multiplier, default 1)
+  shaderOptions?: Record<string, number>;
 }
 
 export const DEFAULT_LEVEL_CONFIG: LevelConfig = {

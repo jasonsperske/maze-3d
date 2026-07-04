@@ -170,6 +170,8 @@ function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec): THREE.Textu
 function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
   const size = spec.size ?? 512;
   const cells = Math.max(1, spec.cells ?? 4);
+  const cellsX = Math.max(0, spec.cellsX ?? cells);
+  const cellsY = Math.max(0, spec.cellsY ?? cells);
   const lineWidth = spec.lineWidth ?? 2;
   const base = hexToRgb(spec.baseColor);
 
@@ -189,7 +191,10 @@ function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
           .map((c) => Math.round(c * 0.8).toString(16).padStart(2, "0"))
           .join("")}`
     );
-    const sample = makeFbm(spec.seed ?? 1, cells * 2);
+    const [mx, my] = Array.isArray(spec.mottleScale)
+      ? spec.mottleScale
+      : [spec.mottleScale ?? cells * 2, spec.mottleScale ?? cells * 2];
+    const sample = makeFbm(spec.seed ?? 1, mx, my);
     const imageData = ctx.getImageData(0, 0, size, size);
     const data = imageData.data;
     for (let y = 0; y < size; y++) {
@@ -207,9 +212,12 @@ function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
   // Grid lines drawn at the leading edge of each cell only, so the pattern
   // tiles without doubled lines at the seam.
   ctx.fillStyle = spec.lineColor;
-  for (let i = 0; i < cells; i++) {
-    const p = Math.round((i * size) / cells);
+  for (let i = 0; i < cellsX; i++) {
+    const p = Math.round((i * size) / cellsX);
     ctx.fillRect(p, 0, lineWidth, size);
+  }
+  for (let i = 0; i < cellsY; i++) {
+    const p = Math.round((i * size) / cellsY);
     ctx.fillRect(0, p, size, lineWidth);
   }
 

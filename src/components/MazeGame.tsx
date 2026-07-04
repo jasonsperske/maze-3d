@@ -468,7 +468,9 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
         {(() => {
           if (!config.shader) return null;
           const ShaderEffect = getShaderComponent(config.shader);
-          return ShaderEffect ? <ShaderEffect proximityRef={proximityRef} /> : null;
+          return ShaderEffect ? (
+            <ShaderEffect proximityRef={proximityRef} options={config.shaderOptions} />
+          ) : null;
         })()}
         {config.fog && (
           <fogExp2 attach="fog" args={[config.fog.color, config.fog.density]} />
