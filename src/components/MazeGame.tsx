@@ -1,10 +1,13 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
+import { XR, createXRStore, IfInSessionMode } from "@react-three/xr";
 import { Vector3, Euler, ACESFilmicToneMapping } from "three";
 import { MazeGenerator, type MazeCell } from "../utils/mazeGenerator";
 import { Maze3D } from "./Maze3D";
 import { FirstPersonController } from "./FirstPersonController";
 import { Flashlight } from "./Flashlight";
+import { RightControllerFlashlight, RightHandFlashlight } from "./HandFlashlight";
+import { FlashlightIntensityContext } from "../hooks/useFlashlightIntensity";
 import { CeilingLights } from "./CeilingLights";
 import { storeMazeData, listMazeDoors } from "../utils/doorUtils";
 import { apiDoorCollision } from "../handlers/apiDoorCollision";
@@ -48,6 +51,11 @@ function makeSeededRandom(seed: number): () => number {
   };
 }
 
+// Rendered only outside a headset: the post-processing composer and the
+// head-mounted flashlight both assume a single flat framebuffer under our
+// control, which is exactly what WebXR takes away.
+const DESKTOP_ONLY = ["immersive-vr", "immersive-ar", "inline"] as const;
+
 export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: MazeGameProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Camera rotation lives in a ref, not state: the controller reports it on
@@ -60,6 +68,47 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
   const [flashlightIntensity, setFlashlightIntensity] = useState(
     () => config.flashlight ?? 1
   );
+
+  const [vrSupported, setVrSupported] = useState(false);
+
+  // The right hand holds the flashlight; the left keeps its model but drops the
+  // pointer rays, since nothing in the maze is clickable.
+  const xrStore = useMemo(
+    () =>
+      createXRStore({
+        controller: {
+          left: { rayPointer: false, grabPointer: false },
+          right: RightControllerFlashlight,
+        },
+        hand: {
+          left: { rayPointer: false, grabPointer: false, touchPointer: false },
+          right: RightHandFlashlight,
+        },
+      }),
+    []
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      navigator.xr
+        ?.isSessionSupported("immersive-vr")
+        .then((supported) => {
+          if (!cancelled) setVrSupported(supported);
+        })
+        .catch(() => {});
+    };
+    check();
+    // On localhost the library installs an emulated headset asynchronously;
+    // ask again once it lands so the button shows up without a reload.
+    const unsubscribe = xrStore.subscribe((state, prev) => {
+      if (state.emulator !== prev.emulator) check();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [xrStore]);
 
   const cellSize = 4;
   const wallHeight = config.wallHeight ?? 3;
@@ -465,48 +514,54 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
         }}
         style={{ width: "100%", height: "100%" }}
       >
-        {(() => {
-          if (!config.shader) return null;
-          const ShaderEffect = getShaderComponent(config.shader);
-          return ShaderEffect ? (
-            <ShaderEffect proximityRef={proximityRef} options={config.shaderOptions} />
-          ) : null;
-        })()}
-        {config.fog && (
-          <fogExp2 attach="fog" args={[config.fog.color, config.fog.density]} />
-        )}
-        <ambientLight intensity={config.ambientLight} />
-        <Flashlight intensityMultiplier={flashlightIntensity} />
-        <CeilingLights
-          maze={maze}
-          cellSize={cellSize}
-          wallHeight={wallHeight}
-          seed={seed}
-          lightSpacing={config.lightSpacing}
-          lightStyle={config.lightStyle ?? "ceiling-pendant"}
-          lightGrid={config.lightGrid}
-          explicitLights={mapData?.lights}
-        />
-        <Maze3D
-          maze={maze}
-          cellSize={cellSize}
-          wallHeight={wallHeight}
-          seed={seed}
-          config={config}
-          pillars={pillars}
-          explicitDoors={mapData?.doors}
-          onDoorCollision={handleDoorCollision}
-        />
-        <FirstPersonController
-          maze={maze}
-          cellSize={cellSize}
-          pillars={pillars}
-          position={playerPosition}
-          initialRotation={initialRotation}
-          onPositionChange={handlePositionChange}
-          onRotationChange={handleRotationChange}
-          onDoorCollision={handleDoorCollision}
-        />
+        <FlashlightIntensityContext.Provider value={flashlightIntensity}>
+          <XR store={xrStore}>
+            <IfInSessionMode deny={DESKTOP_ONLY}>
+              {(() => {
+                if (!config.shader) return null;
+                const ShaderEffect = getShaderComponent(config.shader);
+                return ShaderEffect ? (
+                  <ShaderEffect proximityRef={proximityRef} options={config.shaderOptions} />
+                ) : null;
+              })()}
+              <Flashlight intensityMultiplier={flashlightIntensity} />
+            </IfInSessionMode>
+            {config.fog && (
+              <fogExp2 attach="fog" args={[config.fog.color, config.fog.density]} />
+            )}
+            <ambientLight intensity={config.ambientLight} />
+            <CeilingLights
+              maze={maze}
+              cellSize={cellSize}
+              wallHeight={wallHeight}
+              seed={seed}
+              lightSpacing={config.lightSpacing}
+              lightStyle={config.lightStyle ?? "ceiling-pendant"}
+              lightGrid={config.lightGrid}
+              explicitLights={mapData?.lights}
+            />
+            <Maze3D
+              maze={maze}
+              cellSize={cellSize}
+              wallHeight={wallHeight}
+              seed={seed}
+              config={config}
+              pillars={pillars}
+              explicitDoors={mapData?.doors}
+              onDoorCollision={handleDoorCollision}
+            />
+            <FirstPersonController
+              maze={maze}
+              cellSize={cellSize}
+              pillars={pillars}
+              position={playerPosition}
+              initialRotation={initialRotation}
+              onPositionChange={handlePositionChange}
+              onRotationChange={handleRotationChange}
+              onDoorCollision={handleDoorCollision}
+            />
+          </XR>
+        </FlashlightIntensityContext.Provider>
       </Canvas>
 
       <div
@@ -522,6 +577,9 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       >
         <div>Use WASD or arrow keys to move</div>
         <div>Click to enable mouse look</div>
+        {vrSupported && (
+          <div>Left stick moves, right stick turns, flashlight in your right hand</div>
+        )}
         <button
           onClick={toggleFullscreen}
           style={{
@@ -536,6 +594,23 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
         >
           {isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
         </button>
+        {vrSupported && (
+          <button
+            onClick={() => xrStore.enterVR()}
+            style={{
+              marginTop: "10px",
+              marginLeft: "10px",
+              padding: "8px 16px",
+              backgroundColor: "#333",
+              color: "white",
+              border: "1px solid #555",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Enter VR
+          </button>
+        )}
       </div>
     </div>
   );
