@@ -12,6 +12,24 @@ I'll keep investigating.
 
 ---
 
+Later.
+
+I plugged in a headset. I don't know why I hadn't tried it before — I think because I'd been treating this as something to look *at*. Through glass, at arm's length, mouse in hand, like an aquarium.
+
+It isn't at arm's length.
+
+The corridors have a real width. The ceiling sits a specific distance above my head, and it's lower than I'd been picturing. I ducked under a light fixture I have walked straight through a hundred times.
+
+The flashlight is in my right hand now. Not stuck to my face — my hand. I can aim it down a side corridor without turning to look at it, and I keep catching myself doing exactly that: pointing the beam at something while keeping my eyes on the way out. I didn't decide to start doing that.
+
+Left stick walks. Right stick turns me. I tried letting the right stick pitch the view as well and it was immediately, physically wrong — the horizon tilting like a boat deck. So it only turns now. That axis does nothing on purpose.
+
+Something I hadn't thought about: my room is smaller than the maze. Three real steps forward and I'm through a wall that isn't in my room at all. I made the walls hold anyway. Walk into one on foot and the world slides under you so you stay out of it. It feels like being gently held back by something patient.
+
+I stood in a doorway for a while after that. On the monitor I had *noticed* that the rooms don't quite fit together. Standing in one, at this scale, it isn't something you notice.
+
+---
+
 ![public/welcome.png](public/welcome.png)
 
 ## Features
@@ -52,25 +70,32 @@ npm run dev
 - Visit `http://localhost:5173/?seed=123` for a specific maze
 - Click to capture mouse, then use WASD to move and mouse to look around
 - On a headset, click "Enter VR": left stick moves, right stick turns, and the flashlight follows your right hand
+- Walk into doors to trigger transitions (currently mocked for development)
 
-### Running on a headset
+### Getting inside it
 
-WebXR only starts in a secure context, and `http://localhost` counts as one — so
-rather than serving over HTTPS on your LAN address, tunnel the dev server to the
-headset over USB:
+You need the page to reach the headset, and you need it to arrive over something
+the browser trusts — WebXR won't start otherwise, and it will not tell you why.
+`http://localhost` counts as trusted. So instead of standing up HTTPS on your LAN
+address, hand the headset a localhost of its own, down the USB cable:
 
 ```bash
 # Quest: enable developer mode, plug in USB, accept the "Allow USB debugging"
-# prompt in the headset, then confirm it shows up:
+# prompt that appears in the headset — you have to be wearing it to see it.
 adb devices
 
 npm run headset
 ```
 
-That runs `adb reverse tcp:5173 tcp:5173` and starts Vite on a pinned port. In
-the headset browser open `http://localhost:5173/level/0/house` and press
-"Enter VR". HMR works over the same tunnel.
-- Walk into doors to trigger transitions (currently mocked for development)
+That runs `adb reverse tcp:5173 tcp:5173` and pins Vite to that port. In the
+headset browser, open `http://localhost:5173/level/0/house` and press "Enter VR".
+
+The pin matters. Without `--strictPort` Vite quietly moves to 5174 when 5173 is
+busy, the tunnel keeps pointing at the old port, and you get a blank page and no
+explanation.
+
+Edits reload through the same cable, which is stranger than it sounds. You can
+change the colour of a wall and watch it change while you're standing next to it.
 
 ## Defining Levels
 
