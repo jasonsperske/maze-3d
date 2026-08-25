@@ -12,6 +12,24 @@ I'll keep investigating.
 
 ---
 
+Later.
+
+I plugged in a headset. I don't know why I hadn't tried it before — I think because I'd been treating this as something to look *at*. Through glass, at arm's length, mouse in hand, like an aquarium.
+
+It isn't at arm's length.
+
+The corridors have a real width. The ceiling sits a specific distance above my head, and it's lower than I'd been picturing. I ducked under a light fixture I have walked straight through a hundred times.
+
+The flashlight is in my right hand now. Not stuck to my face — my hand. I can aim it down a side corridor without turning to look at it, and I keep catching myself doing exactly that: pointing the beam at something while keeping my eyes on the way out. I didn't decide to start doing that.
+
+Left stick walks. Right stick turns me. I tried letting the right stick pitch the view as well and it was immediately, physically wrong — the horizon tilting like a boat deck. So it only turns now. That axis does nothing on purpose.
+
+Something I hadn't thought about: my room is smaller than the maze. Three real steps forward and I'm through a wall that isn't in my room at all. I made the walls hold anyway. Walk into one on foot and the world slides under you so you stay out of it. It feels like being gently held back by something patient.
+
+I stood in a doorway for a while after that. On the monitor I had *noticed* that the rooms don't quite fit together. Standing in one, at this scale, it isn't something you notice.
+
+---
+
 ![public/welcome.png](public/welcome.png)
 
 ## Features
@@ -21,6 +39,7 @@ I'll keep investigating.
 - **Flashlight system** - Mouse-controlled beam that follows your cursor or points forward when mouse is captured
 - **Collision detection** - Proper wall collision with smooth movement
 - **Atmospheric lighting** - Sparse ceiling lights with subtle flickering effects
+- **WebXR / VR** - "Enter VR" on any headset that supports it: left thumbstick walks and strafes, right thumbstick turns your body, and the flashlight is held in your right hand
 
 ### 🚪 Door System
 - **Interactive doors** - Randomly placed doors in maze walls (10% chance per wall)
@@ -50,7 +69,33 @@ npm run dev
 - Visit `http://localhost:5173/` for a random maze
 - Visit `http://localhost:5173/?seed=123` for a specific maze
 - Click to capture mouse, then use WASD to move and mouse to look around
+- On a headset, click "Enter VR": left stick moves, right stick turns, and the flashlight follows your right hand
 - Walk into doors to trigger transitions (currently mocked for development)
+
+### Getting inside it
+
+You need the page to reach the headset, and you need it to arrive over something
+the browser trusts — WebXR won't start otherwise, and it will not tell you why.
+`http://localhost` counts as trusted. So instead of standing up HTTPS on your LAN
+address, hand the headset a localhost of its own, down the USB cable:
+
+```bash
+# Quest: enable developer mode, plug in USB, accept the "Allow USB debugging"
+# prompt that appears in the headset — you have to be wearing it to see it.
+adb devices
+
+npm run headset
+```
+
+That runs `adb reverse tcp:5173 tcp:5173` and pins Vite to that port. In the
+headset browser, open `http://localhost:5173/level/0/house` and press "Enter VR".
+
+The pin matters. Without `--strictPort` Vite quietly moves to 5174 when 5173 is
+busy, the tunnel keeps pointing at the old port, and you get a blank page and no
+explanation.
+
+Edits reload through the same cable, which is stranger than it sounds. You can
+change the colour of a wall and watch it change while you're standing next to it.
 
 ## Defining Levels
 
@@ -132,6 +177,15 @@ Player movement system featuring:
 - Mouse look with pointer lock
 - Wall collision detection
 - Door interaction via raycasting
+- VR locomotion: in a session the camera belongs to the headset, so the player
+  is moved by transforming the `XROrigin` rig instead. Turning rotates the rig
+  about the head so the world spins around the player, and the same wall
+  collision applies to both stick movement and real-world walking.
+
+#### `HandFlashlight.tsx`
+The VR flashlight: mounted on the right controller (or right hand) so the beam
+points where the player aims rather than where they look. Registered as the
+right-hand implementation on the XR store in `MazeGame.tsx`.
 
 #### `Flashlight.tsx`
 Dynamic lighting component:
