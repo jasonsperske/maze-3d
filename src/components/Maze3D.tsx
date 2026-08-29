@@ -1,4 +1,5 @@
-import { useMemo, useEffect, type JSX } from 'react';
+import { useMemo, useEffect, useRef, type JSX, type RefObject } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { type MazeCell } from '../utils/mazeGenerator';
 import { type LevelConfig } from '../types/LevelConfig';
@@ -6,6 +7,60 @@ import { useLevelTextures } from '../hooks/useLevelTextures';
 import { getTileSize } from '../utils/textureLoader';
 import { makeFbm } from '../utils/noise';
 import { type Pillar } from '../utils/openPlan';
+import { computeWallLayout, NORTH, SOUTH, EAST, WEST, type Direction } from '../utils/wallLayout';
+import { VisibilitySolver, sightRange } from '../utils/visibility';
+
+// ?cull=off puts every cell back on screen, for when something looks wrong in
+// a headset and the question is whether the culler is the reason.
+const CULLING_ENABLED = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get('cull') !== 'off';
+  } catch {
+    return true;
+  }
+})();
+
+// Walls you cannot see are switched off rather than drawn.
+//
+// Three frustum-culls every mesh for free but has no notion of occlusion, so
+// down a corridor it submits every room behind the wall in front of you. The
+// solver floods outward through the openings from the eye and hands back the
+// cells worth drawing; setting a cell group's visible flag false makes
+// projectObject return immediately and skip that whole subtree.
+function CellCulling({
+  solver,
+  groups,
+  range,
+}: {
+  solver: VisibilitySolver;
+  groups: RefObject<(THREE.Group | null)[]>;
+  range: number;
+}) {
+  const eye = useRef(new THREE.Vector3());
+  const solvedAt = useRef(new THREE.Vector3(Infinity, Infinity, Infinity));
+
+  useFrame(({ camera }) => {
+    camera.getWorldPosition(eye.current);
+    // The visible set covers all 360 degrees, so it only goes stale when the
+    // eye moves — turning your head in a headset costs nothing. A quarter of a
+    // unit is nothing next to the one-cell dilation the solver already applies.
+    if (eye.current.distanceToSquared(solvedAt.current) > 0.0625) {
+      solvedAt.current.copy(eye.current);
+      solver.solve(eye.current.x, eye.current.z, range);
+    }
+    // Reapplied every frame even when the solve is skipped: the cell groups
+    // remount whenever the level's materials are rebuilt, and they come back
+    // from React visible.
+    const drawn = solver.drawn;
+    const list = groups.current;
+    for (let i = 0; i < list.length; i++) {
+      const g = list[i];
+      if (g !== null) g.visible = drawn[i] === 1;
+    }
+  });
+
+  return null;
+}
 
 // Murky canvas for hung pictures: dark green-brown fbm clouds darkened toward
 // the edges so nothing in the image is ever quite readable. One shared texture
@@ -189,6 +244,25 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
   const mazeWidth = maze.length * cellSize;
   const mazeDepth = maze[0].length * cellSize;
 
+  // What every wall turned out to be, decided once so the geometry below and
+  // the visibility flood above cannot disagree about which walls you see
+  // through. Replaces the door and half-height streams this component used to
+  // roll inline.
+  const layout = useMemo(
+    () => computeWallLayout(maze, seed, config, explicitDoors),
+    [maze, seed, config, explicitDoors]
+  );
+  const solver = useMemo(() => new VisibilitySolver(layout, cellSize), [layout, cellSize]);
+  const range = useMemo(
+    () => sightRange(config.fog, layout.width, layout.height, cellSize),
+    [config.fog, layout, cellSize]
+  );
+  // One slot per cell, indexed the same way the solver indexes `drawn`.
+  const cellGroups = useRef<(THREE.Group | null)[]>([]);
+  if (cellGroups.current.length !== layout.width * layout.height) {
+    cellGroups.current = new Array(layout.width * layout.height).fill(null);
+  }
+
   // Repeat values are per-surface: each surface needs its own tiling factor
   // because tileSize is in world units and surfaces have different dimensions.
   // Normal maps tile alongside their colour map using the colour map's tile
@@ -244,34 +318,28 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
   ]);
 
   const walls = useMemo(() => {
-    const elements: JSX.Element[] = [];
-    const random = makeSeededRandom(seed);
-    // Separate stream for half-height so door randomisation is unaffected
-    const halfRandom = makeSeededRandom(seed ^ 0xf00d);
-    // Separate stream for pictures for the same reason: doorUtils replicates
-    // the door stream draw-for-draw, so nothing else may consume from it.
+    const cells: JSX.Element[] = [];
+    const height = layout.height;
+    // The picture stream stays here — it is seeded separately and never
+    // interleaves with the door and half-height streams the layout owns.
     const pictureRandom = makeSeededRandom(seed ^ 0x91c7);
 
     // Helper: render one wall segment (door or plain, full or half-height).
     // pos: center position  dims: [w, h, d] of a full-height plain wall
     // isNS: true for north/south walls (door opening is along X), false for east/west (along Z)
     const renderWall = (
+      elements: JSX.Element[],
       key: string,
       px: number, pz: number,
       fullW: number, fullD: number,
       isNS: boolean,
       cellX: number,
       cellZ: number,
-      direction: "north" | "south" | "east" | "west"
+      direction: Direction
     ) => {
-      const hasDoor = explicitDoors
-        ? explicitDoors.has(`${cellX},${cellZ},${direction}`)
-        : random() < config.doorFrequency;
-      const isHalf =
-        !hasDoor &&
-        !explicitDoors &&
-        config.halfHeightPartitions &&
-        halfRandom() < config.halfHeightFrequency;
+      const kind = layout.kind(cellX, cellZ, direction);
+      const hasDoor = kind === "door";
+      const isHalf = kind === "half";
 
       const h = isHalf ? wallHeight / 2 : wallHeight;
       const py = h / 2;
@@ -413,58 +481,52 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
       }
     };
 
+    // Grouped by cell so the culler can switch a whole cell's geometry off
+    // with one flag instead of touching every mesh in it.
     maze.forEach((row, x) => {
       row.forEach((cell, z) => {
         const baseX = x * cellSize + cellSize / 2;
         const baseZ = z * cellSize + cellSize / 2;
+        const elements: JSX.Element[] = [];
 
         if (cell.walls.north) {
-          renderWall(
-            `wall-north-${x}-${z}`,
-            baseX, baseZ - cellSize / 2,
-            cellSize, 0.2,
-            true,
-            x, z, "north"
-          );
+          renderWall(elements, `wall-north-${x}-${z}`,
+            baseX, baseZ - cellSize / 2, cellSize, 0.2, true, x, z, NORTH);
         }
         if (cell.walls.south) {
-          renderWall(
-            `wall-south-${x}-${z}`,
-            baseX, baseZ + cellSize / 2,
-            cellSize, 0.2,
-            true,
-            x, z, "south"
-          );
+          renderWall(elements, `wall-south-${x}-${z}`,
+            baseX, baseZ + cellSize / 2, cellSize, 0.2, true, x, z, SOUTH);
         }
         if (cell.walls.east) {
-          renderWall(
-            `wall-east-${x}-${z}`,
-            baseX + cellSize / 2, baseZ,
-            0.2, cellSize,
-            false,
-            x, z, "east"
-          );
+          renderWall(elements, `wall-east-${x}-${z}`,
+            baseX + cellSize / 2, baseZ, 0.2, cellSize, false, x, z, EAST);
         }
         if (cell.walls.west) {
-          renderWall(
-            `wall-west-${x}-${z}`,
-            baseX - cellSize / 2, baseZ,
-            0.2, cellSize,
-            false,
-            x, z, "west"
-          );
+          renderWall(elements, `wall-west-${x}-${z}`,
+            baseX - cellSize / 2, baseZ, 0.2, cellSize, false, x, z, WEST);
         }
+
+        if (elements.length === 0) return; // open-plan cells with nothing left
+        const slot = x * height + z;
+        cells.push(
+          <group
+            key={`cell-${x}-${z}`}
+            ref={(g) => { cellGroups.current[slot] = g; }}
+          >
+            {elements}
+          </group>
+        );
       });
     });
 
-    return elements;
+    return cells;
   }, [
     maze,
     cellSize,
     wallHeight,
     seed,
     config,
-    explicitDoors,
+    layout,
     materials,
   ]);
 
@@ -509,6 +571,9 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
 
   return (
     <group>
+      {CULLING_ENABLED && (
+        <CellCulling solver={solver} groups={cellGroups} range={range} />
+      )}
       {walls}
       {floor}
       {ceiling}
