@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, type JSX } from 'react';
+import { useMemo, useEffect, type JSX } from 'react';
 import * as THREE from 'three';
 import { type MazeCell } from '../utils/mazeGenerator';
 import { type LevelConfig } from '../types/LevelConfig';
@@ -40,41 +40,50 @@ function makeMurkyPictureTexture(seed: number): THREE.CanvasTexture {
   return tex;
 }
 
-// MeshStandardMaterial only adds the USE_MAP / USE_NORMALMAP defines when the
-// shader is first compiled, so transitioning these from null → Texture after
-// mount needs an explicit needsUpdate or the texture binds but never appears.
-function SurfaceMaterial({
-  color,
-  map,
-  normalMap,
-  normalScale = 1,
-  roughness = 1,
-}: {
-  color: string;
-  map: THREE.Texture | null;
-  normalMap?: THREE.Texture | null;
-  normalScale?: number;
-  roughness?: number;
-}) {
-  const ref = useRef<THREE.MeshStandardMaterial>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.needsUpdate = true;
-  }, [map, normalMap]);
-  const scale = useMemo(
-    () => new THREE.Vector2(normalScale, normalScale),
-    [normalScale]
-  );
-  return (
-    <meshStandardMaterial
-      ref={ref}
-      color={color}
-      map={map}
-      normalMap={normalMap ?? undefined}
-      normalScale={scale}
-      roughness={roughness}
-      metalness={0}
-    />
-  );
+// One material instance per distinct surface, shared by every mesh wearing it.
+//
+// Three sorts opaque draws by groupOrder → renderOrder → material.id → depth.
+// A per-mesh <meshStandardMaterial> element gives every wall its own instance,
+// which collapsed that sort onto material.id — that is, onto the order the
+// walls happened to be constructed in, which is maze traversal order. Walls
+// were being submitted in essentially random depth order, exactly the order
+// that defeats early-Z rejection on a tiled mobile GPU. Sharing instances
+// restores the front-to-back sort and turns thousands of per-draw uniform
+// uploads into a dozen.
+//
+// These are rebuilt rather than mutated when the textures finish loading, so
+// the USE_MAP / USE_NORMALMAP defines are present at first shader compile and
+// the old needsUpdate dance is unnecessary.
+function makeSurfaceMaterial(
+  color: string,
+  map: THREE.Texture | null,
+  normalMap: THREE.Texture | null,
+  normalScale: number,
+  roughness: number
+): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    map,
+    normalMap,
+    normalScale: new THREE.Vector2(normalScale, normalScale),
+    roughness,
+    metalness: 0,
+  });
+}
+
+// The only two surfaces with no configurable colour.
+const DOOR_COLOR = '#8B4513';
+const PICTURE_TINTS = ['#a8ad9c', '#b3a291', '#98a4ad', '#9aa08e'];
+
+interface SurfaceMaterials {
+  wall: THREE.MeshStandardMaterial;
+  halfWall: THREE.MeshStandardMaterial;
+  floor: THREE.MeshStandardMaterial;
+  ceiling: THREE.MeshStandardMaterial;
+  door: THREE.MeshStandardMaterial;
+  trim: THREE.MeshStandardMaterial | null;
+  pictureFrame: THREE.MeshStandardMaterial | null;
+  pictureCanvas: THREE.MeshStandardMaterial[];
 }
 
 interface Maze3DProps {
@@ -114,6 +123,68 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
       pictureTexture?.dispose();
     };
   }, [pictureTexture]);
+
+  const materials = useMemo<SurfaceMaterials>(
+    () => ({
+      wall: makeSurfaceMaterial(
+        config.wallColor, textures.wall, textures.wallNormal,
+        config.wallNormalScale ?? 1, config.wallRoughness ?? 1
+      ),
+      halfWall: makeSurfaceMaterial(
+        config.halfHeightColor, textures.wall, textures.wallNormal,
+        config.wallNormalScale ?? 1, config.wallRoughness ?? 1
+      ),
+      floor: makeSurfaceMaterial(
+        config.floorColor, textures.floor, textures.floorNormal,
+        config.floorNormalScale ?? 1, config.floorRoughness ?? 1
+      ),
+      ceiling: makeSurfaceMaterial(
+        config.ceilingColor, textures.ceiling, textures.ceilingNormal,
+        config.ceilingNormalScale ?? 1, config.ceilingRoughness ?? 1
+      ),
+      door: new THREE.MeshStandardMaterial({
+        color: DOOR_COLOR, roughness: 0.7, metalness: 0,
+      }),
+      trim: config.trim
+        ? new THREE.MeshStandardMaterial({
+            color: config.trim.color,
+            roughness: config.trim.roughness ?? 0.6,
+            metalness: 0,
+          })
+        : null,
+      pictureFrame: config.pictures
+        ? new THREE.MeshStandardMaterial({
+            color: config.pictures.frameColor ?? '#5a4030',
+            roughness: 0.55,
+            metalness: 0,
+          })
+        : null,
+      // Low roughness reads as glass over the murky canvas under a light.
+      pictureCanvas: config.pictures
+        ? PICTURE_TINTS.map(
+            (tint) =>
+              new THREE.MeshStandardMaterial({
+                color: tint,
+                map: pictureTexture,
+                roughness: 0.2,
+                metalness: 0,
+              })
+          )
+        : [],
+    }),
+    [config, textures, pictureTexture]
+  );
+
+  // Passed to meshes by prop rather than built as JSX children, so r3f does not
+  // own them and will not dispose them for us.
+  useEffect(() => {
+    return () => {
+      for (const entry of Object.values(materials)) {
+        if (Array.isArray(entry)) entry.forEach((m) => m.dispose());
+        else entry?.dispose();
+      }
+    };
+  }, [materials]);
 
   const mazeWidth = maze.length * cellSize;
   const mazeDepth = maze[0].length * cellSize;
@@ -181,16 +252,6 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
     // the door stream draw-for-draw, so nothing else may consume from it.
     const pictureRandom = makeSeededRandom(seed ^ 0x91c7);
 
-    const wallMaterial = (color: string) => (
-      <SurfaceMaterial
-        color={color}
-        map={textures.wall}
-        normalMap={textures.wallNormal}
-        normalScale={config.wallNormalScale ?? 1}
-        roughness={config.wallRoughness ?? 1}
-      />
-    );
-
     // Helper: render one wall segment (door or plain, full or half-height).
     // pos: center position  dims: [w, h, d] of a full-height plain wall
     // isNS: true for north/south walls (door opening is along X), false for east/west (along Z)
@@ -214,7 +275,6 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
 
       const h = isHalf ? wallHeight / 2 : wallHeight;
       const py = h / 2;
-      const color = isHalf ? config.halfHeightColor : config.wallColor;
 
       if (hasDoor) {
         // Side frames (full height, flanking the opening)
@@ -230,15 +290,13 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
           : [px, pz + frameOffset];
 
         elements.push(
-          <mesh key={`${key}-left`} position={[lx, wallHeight / 2, lz]}>
+          <mesh key={`${key}-left`} position={[lx, wallHeight / 2, lz]} material={materials.wall}>
             <boxGeometry args={[frameW, wallHeight, frameD]} />
-            {wallMaterial(config.wallColor)}
           </mesh>
         );
         elements.push(
-          <mesh key={`${key}-right`} position={[rx, wallHeight / 2, rz]}>
+          <mesh key={`${key}-right`} position={[rx, wallHeight / 2, rz]} material={materials.wall}>
             <boxGeometry args={[frameW, wallHeight, frameD]} />
-            {wallMaterial(config.wallColor)}
           </mesh>
         );
 
@@ -246,9 +304,8 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
         const topW = isNS ? cellSize * 0.2 : 0.2;
         const topD = isNS ? 0.2 : cellSize * 0.2;
         elements.push(
-          <mesh key={`${key}-top`} position={[px, wallHeight * 0.9, pz]}>
+          <mesh key={`${key}-top`} position={[px, wallHeight * 0.9, pz]} material={materials.wall}>
             <boxGeometry args={[topW, wallHeight * 0.2, topD]} />
-            {wallMaterial(config.wallColor)}
           </mesh>
         );
 
@@ -260,45 +317,43 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
             key={`${key}-door`}
             position={[px, wallHeight * 0.4, pz]}
             userData={{ isDoor: true, position: { x: px, y: wallHeight / 2, z: pz } }}
+            material={materials.door}
           >
             <boxGeometry args={[doorW, wallHeight * 0.8, doorD]} />
-            <meshStandardMaterial color="#8B4513" roughness={0.7} metalness={0} />
           </mesh>
         );
       } else {
         elements.push(
-          <mesh key={key} position={[px, py, pz]}>
+          <mesh
+            key={key}
+            position={[px, py, pz]}
+            material={isHalf ? materials.halfWall : materials.wall}
+          >
             <boxGeometry args={[fullW, h, fullD]} />
-            {wallMaterial(color)}
           </mesh>
         );
 
         // Baseboard + crown moulding: boxes slightly proud of the wall on both
         // faces. NS and EW strips get marginally different heights so their top
         // faces never sit coplanar where they intersect at corners.
-        if (config.trim && !isHalf) {
+        if (config.trim && materials.trim && !isHalf) {
           const proudW = fullW + (isNS ? 0 : 0.12);
           const proudD = fullD + (isNS ? 0.12 : 0);
           const baseH = isNS ? 0.22 : 0.215;
           const crownH = isNS ? 0.14 : 0.137;
-          const trimMaterial = (
-            <meshStandardMaterial
-              color={config.trim.color}
-              roughness={config.trim.roughness ?? 0.6}
-              metalness={0}
-            />
-          );
           elements.push(
-            <mesh key={`${key}-base`} position={[px, baseH / 2, pz]}>
+            <mesh key={`${key}-base`} position={[px, baseH / 2, pz]} material={materials.trim}>
               <boxGeometry args={[proudW, baseH, proudD]} />
-              {trimMaterial}
             </mesh>
           );
           if (config.trim.crown ?? true) {
             elements.push(
-              <mesh key={`${key}-crown`} position={[px, wallHeight - crownH / 2, pz]}>
+              <mesh
+                key={`${key}-crown`}
+                position={[px, wallHeight - crownH / 2, pz]}
+                material={materials.trim}
+              >
                 <boxGeometry args={[proudW, crownH, proudD]} />
-                {trimMaterial}
               </mesh>
             );
           }
@@ -307,8 +362,7 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
         // Framed pictures: each face of the wall gets an independent chance.
         // A frame is a backing board with a smaller murky "canvas" mounted
         // proud of it; low canvas roughness reads as glass under a light.
-        if (config.pictures && !isHalf) {
-          const frameColor = config.pictures.frameColor ?? '#5a4030';
+        if (config.pictures && materials.pictureFrame && !isHalf) {
           const sizes: Array<[number, number]> = [
             [0.65, 0.85], [0.9, 0.7], [0.55, 0.65], [0.75, 1.0],
           ];
@@ -318,9 +372,8 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
             const cy = 1.55 + (pictureRandom() - 0.5) * 0.3;
             const along =
               (pictureRandom() - 0.5) * Math.max(0, cellSize - pw - 1.8);
-            const tint = ['#a8ad9c', '#b3a291', '#98a4ad', '#9aa08e'][
-              Math.floor(pictureRandom() * 4)
-            ];
+            const canvasMaterial =
+              materials.pictureCanvas[Math.floor(pictureRandom() * 4)];
 
             const [fx, fz] = isNS
               ? [px + along, pz + side * 0.14]
@@ -330,31 +383,28 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
               : [px + side * 0.18, pz + along];
 
             elements.push(
-              <mesh key={`${key}-frame-${side}`} position={[fx, cy, fz]}>
+              <mesh
+                key={`${key}-frame-${side}`}
+                position={[fx, cy, fz]}
+                material={materials.pictureFrame}
+              >
                 <boxGeometry
                   args={isNS ? [pw, ph, 0.06] : [0.06, ph, pw]}
-                />
-                <meshStandardMaterial
-                  color={frameColor}
-                  roughness={0.55}
-                  metalness={0}
                 />
               </mesh>
             );
             elements.push(
-              <mesh key={`${key}-picture-${side}`} position={[ix, cy, iz]}>
+              <mesh
+                key={`${key}-picture-${side}`}
+                position={[ix, cy, iz]}
+                material={canvasMaterial}
+              >
                 <boxGeometry
                   args={
                     isNS
                       ? [pw * 0.8, ph * 0.78, 0.03]
                       : [0.03, ph * 0.78, pw * 0.8]
                   }
-                />
-                <meshStandardMaterial
-                  color={tint}
-                  map={pictureTexture}
-                  roughness={0.2}
-                  metalness={0}
                 />
               </mesh>
             );
@@ -415,86 +465,47 @@ export function Maze3D({ maze, cellSize, wallHeight, seed, config, explicitDoors
     seed,
     config,
     explicitDoors,
-    textures.wall,
-    textures.wallNormal,
-    pictureTexture,
+    materials,
   ]);
 
   const floor = useMemo(() => {
     return (
-      <mesh position={[mazeWidth / 2, -0.1, mazeDepth / 2]}>
+      <mesh
+        position={[mazeWidth / 2, -0.1, mazeDepth / 2]}
+        material={materials.floor}
+      >
         <boxGeometry args={[mazeWidth, 0.2, mazeDepth]} />
-        <SurfaceMaterial
-          color={config.floorColor}
-          map={textures.floor}
-          normalMap={textures.floorNormal}
-          normalScale={config.floorNormalScale ?? 1}
-          roughness={config.floorRoughness ?? 1}
-        />
       </mesh>
     );
-  }, [
-    mazeWidth,
-    mazeDepth,
-    config.floorColor,
-    config.floorNormalScale,
-    config.floorRoughness,
-    textures.floor,
-    textures.floorNormal,
-  ]);
+  }, [mazeWidth, mazeDepth, materials.floor]);
 
   const ceiling = useMemo(() => {
     return (
-      <mesh position={[mazeWidth / 2, wallHeight + 0.1, mazeDepth / 2]}>
+      <mesh
+        position={[mazeWidth / 2, wallHeight + 0.1, mazeDepth / 2]}
+        material={materials.ceiling}
+      >
         <boxGeometry args={[mazeWidth, 0.2, mazeDepth]} />
-        <SurfaceMaterial
-          color={config.ceilingColor}
-          map={textures.ceiling}
-          normalMap={textures.ceilingNormal}
-          normalScale={config.ceilingNormalScale ?? 1}
-          roughness={config.ceilingRoughness ?? 1}
-        />
       </mesh>
     );
-  }, [
-    mazeWidth,
-    mazeDepth,
-    wallHeight,
-    config.ceilingColor,
-    config.ceilingNormalScale,
-    config.ceilingRoughness,
-    textures.ceiling,
-    textures.ceilingNormal,
-  ]);
+  }, [mazeWidth, mazeDepth, wallHeight, materials.ceiling]);
 
   // Freestanding columns share the wall material so they read as structure
   const pillarMeshes = useMemo(() => {
     if (!pillars || pillars.length === 0) return null;
     return pillars.map((p, i) => (
       <group key={`pillar-${i}`}>
-        <mesh position={[p.x, wallHeight / 2, p.z]}>
+        <mesh position={[p.x, wallHeight / 2, p.z]} material={materials.wall}>
           <boxGeometry args={[p.size, wallHeight, p.size]} />
-          <SurfaceMaterial
-            color={config.wallColor}
-            map={textures.wall}
-            normalMap={textures.wallNormal}
-            normalScale={config.wallNormalScale ?? 1}
-            roughness={config.wallRoughness ?? 1}
-          />
         </mesh>
-        {config.trim && (
-          <mesh position={[p.x, 0.11, p.z]}>
+        {materials.trim && (
+          <mesh position={[p.x, 0.11, p.z]} material={materials.trim}>
             <boxGeometry args={[p.size + 0.1, 0.22, p.size + 0.1]} />
-            <meshStandardMaterial
-              color={config.trim.color}
-              roughness={config.trim.roughness ?? 0.6}
-              metalness={0}
-            />
           </mesh>
         )}
       </group>
     ));
-  }, [pillars, wallHeight, config, textures.wall, textures.wallNormal]);
+  }, [pillars, wallHeight, materials.wall, materials.trim]);
 
   return (
     <group>
