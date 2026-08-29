@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { type LevelConfig } from "../types/LevelConfig";
 import { loadNormalMapFromSpec, loadTextureFromSpec } from "../utils/textureLoader";
+import { getRenderQuality } from "../utils/deviceProfile";
 
 export interface LevelTextures {
   wall: THREE.Texture | null;
@@ -29,11 +30,16 @@ export function useLevelTextures(config: LevelConfig): LevelTextures {
   useEffect(() => {
     let cancelled = false;
     const created: THREE.Texture[] = [];
+    const quality = getRenderQuality();
 
-    // Normal maps are noise-based, so we can build them synchronously.
-    const wallNormal = config.wallNormalMap ? loadNormalMapFromSpec(config.wallNormalMap) : null;
-    const floorNormal = config.floorNormalMap ? loadNormalMapFromSpec(config.floorNormalMap) : null;
-    const ceilingNormal = config.ceilingNormalMap ? loadNormalMapFromSpec(config.ceilingNormalMap) : null;
+    // Normal maps are noise-based, so we can build them synchronously. On the
+    // lowest tier they are dropped outright: three derives the tangent frame
+    // from screen-space derivatives, so every lit fragment on every wall pays
+    // for them, and walls and floor are most of what a headset draws.
+    const normals = quality.maxNormalMapSize !== null;
+    const wallNormal = normals && config.wallNormalMap ? loadNormalMapFromSpec(config.wallNormalMap, quality) : null;
+    const floorNormal = normals && config.floorNormalMap ? loadNormalMapFromSpec(config.floorNormalMap, quality) : null;
+    const ceilingNormal = normals && config.ceilingNormalMap ? loadNormalMapFromSpec(config.ceilingNormalMap, quality) : null;
     if (wallNormal) created.push(wallNormal);
     if (floorNormal) created.push(floorNormal);
     if (ceilingNormal) created.push(ceilingNormal);
@@ -44,7 +50,7 @@ export function useLevelTextures(config: LevelConfig): LevelTextures {
     ): Promise<[ColorKey, THREE.Texture | null]> => {
       if (!spec) return [key, null];
       try {
-        const tex = await loadTextureFromSpec(spec);
+        const tex = await loadTextureFromSpec(spec, quality);
         return [key, tex];
       } catch (err) {
         console.error(`useLevelTextures: failed to load ${key}`, err);

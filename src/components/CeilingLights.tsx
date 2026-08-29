@@ -15,6 +15,9 @@ interface CeilingLightsProps {
   // When set, lights are placed only at these cell coordinates (key = "x,z").
   // Bypasses random placement.
   explicitLights?: Set<string>;
+  // How many fixtures may cast a real pointLight; the rest still glow. Comes
+  // from the device profile so headsets get a shorter per-fragment light loop.
+  pointLightBudget?: number;
 }
 
 export function CeilingLights({
@@ -26,6 +29,7 @@ export function CeilingLights({
   lightStyle,
   lightGrid,
   explicitLights,
+  pointLightBudget = 28,
 }: CeilingLightsProps) {
   const fixtures = useMemo(
     () =>
@@ -44,15 +48,15 @@ export function CeilingLights({
 
   // Every real light is compiled into every material's shader, so a dense
   // fixture grid (lightGrid + low spacing) can blow the GPU's
-  // MAX_FRAGMENT_UNIFORM_VECTORS limit. Emissive surfaces cost nothing —
-  // above a budget, only every Nth fixture actually casts light; the rest
-  // still glow.
-  const POINT_LIGHT_BUDGET = 28;
+  // MAX_FRAGMENT_UNIFORM_VECTORS limit — and on a tiled mobile GPU each one
+  // adds a term to the loop that every wall and floor pixel runs. Emissive
+  // surfaces cost nothing, so above the budget only every Nth fixture actually
+  // casts light; the rest still glow.
   const totalLightCount = fixtures.reduce(
     (sum, f) => sum + (f.kind === "fluorescent" ? 2 : 1),
     0
   );
-  const stride = Math.max(1, Math.ceil(totalLightCount / POINT_LIGHT_BUDGET));
+  const stride = Math.max(1, Math.ceil(totalLightCount / pointLightBudget));
 
   return (
     <>

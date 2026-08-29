@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { XR, createXRStore, IfInSessionMode } from "@react-three/xr";
 import { Vector3, Euler, ACESFilmicToneMapping } from "three";
 import { MazeGenerator, type MazeCell } from "../utils/mazeGenerator";
@@ -17,6 +17,7 @@ import { getShaderComponent } from "../shaders";
 import { type ParsedMap, directionToRotationY } from "../utils/asciiMapParser";
 import { placeLights } from "../utils/lightPlacement";
 import { applyOpenPlan, type Pillar } from "../utils/openPlan";
+import { getRenderQuality } from "../utils/deviceProfile";
 
 interface MazeGameProps {
   config: LevelConfig;
@@ -56,6 +57,22 @@ function makeSeededRandom(seed: number): () => number {
 // control, which is exactly what WebXR takes away.
 const DESKTOP_ONLY = ["immersive-vr", "immersive-ar", "inline"] as const;
 
+// Fill rate is the scarce resource on a standalone headset, and the maze is
+// nothing but full-screen textured surfaces. The framebuffer scale has to be
+// set before the session starts, so this mounts with the canvas rather than
+// with the session.
+function XRRenderTuning({ scale }: { scale: number }) {
+  const gl = useThree((state) => state.gl);
+  useEffect(() => {
+    gl.xr.setFramebufferScaleFactor(scale);
+    // Maximum fixed-foveated rendering: the periphery, which the lenses blur
+    // anyway, renders at lower resolution. This is three's default, but it is
+    // the other half of the same trade-off, so pin it rather than inherit it.
+    gl.xr.setFoveation(1);
+  }, [gl, scale]);
+  return null;
+}
+
 export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: MazeGameProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Camera rotation lives in a ref, not state: the controller reports it on
@@ -70,6 +87,10 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
   );
 
   const [vrSupported, setVrSupported] = useState(false);
+
+  // Detected once per page load; ?quality=quest2|quest3|desktop forces a tier
+  // so a headset profile can be felt (and its look checked) from the desktop.
+  const quality = useMemo(() => getRenderQuality(), []);
 
   // The right hand holds the flashlight; the left keeps its model but drops the
   // pointer rays, since nothing in the maze is clickable.
@@ -482,14 +503,16 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
     (window as any).loadState = loadState;
     (window as any).letThereBeLight = letThereBeLight;
     (window as any).letMeOutOfHere = letMeOutOfHere;
+    (window as any).renderQuality = () => quality;
     return () => {
       delete (window as any).secretToEverybody;
       delete (window as any).saveState;
       delete (window as any).loadState;
       delete (window as any).letThereBeLight;
       delete (window as any).letMeOutOfHere;
+      delete (window as any).renderQuality;
     };
-  }, [maze, printMazeASCII, saveState, loadState, letThereBeLight, letMeOutOfHere]);
+  }, [maze, printMazeASCII, saveState, loadState, letThereBeLight, letMeOutOfHere, quality]);
 
   return (
     <div
@@ -507,8 +530,9 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
           position: [initialPosition.x, initialPosition.y, initialPosition.z],
           fov: 75,
         }}
+        dpr={[1, quality.maxPixelRatio]}
         gl={{
-          antialias: true,
+          antialias: quality.antialias,
           toneMapping: ACESFilmicToneMapping,
           toneMappingExposure: 1.1,
         }}
@@ -516,6 +540,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
       >
         <FlashlightIntensityContext.Provider value={flashlightIntensity}>
           <XR store={xrStore}>
+            <XRRenderTuning scale={quality.xrFramebufferScale} />
             <IfInSessionMode deny={DESKTOP_ONLY}>
               {(() => {
                 if (!config.shader) return null;
@@ -539,6 +564,7 @@ export function MazeGame({ config, level, seed: seedProp, mapName, mapData }: Ma
               lightStyle={config.lightStyle ?? "ceiling-pendant"}
               lightGrid={config.lightGrid}
               explicitLights={mapData?.lights}
+              pointLightBudget={quality.pointLightBudget}
             />
             <Maze3D
               maze={maze}

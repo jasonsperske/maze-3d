@@ -10,6 +10,7 @@ import type {
   NoiseScale,
 } from "../types/LevelConfig";
 import { makePerlin, makeFbm, makeWorley } from "./noise";
+import { capTextureSize, getRenderQuality, type RenderQuality } from "./deviceProfile";
 
 const DEFAULT_NOISE_SIZE = 256;
 const DEFAULT_SVG_SIZE = 512;
@@ -25,32 +26,44 @@ function makeSampler(algorithm: NoiseAlgorithm, seed: number, scale: NoiseScale)
   return makeWorley(seed, sx);
 }
 
-export async function loadTextureFromSpec(spec: TextureSpec): Promise<THREE.Texture> {
+// `quality` caps the resolution these are generated at and the anisotropy they
+// are sampled with. On a headset that is a 4x cut in texels — and, because the
+// noise fields are evaluated per-pixel in JS, a 4x cut in level load time too.
+export async function loadTextureFromSpec(
+  spec: TextureSpec,
+  quality: RenderQuality = getRenderQuality()
+): Promise<THREE.Texture> {
+  const maxSize = quality.maxTextureSize;
   let tex: THREE.Texture;
-  if (spec.type === "image") tex = await loadImageTexture(spec);
-  else if (spec.type === "noise") tex = generateNoiseTexture(spec);
-  else if (spec.type === "grid") tex = generateGridTexture(spec);
-  else tex = generateLayeredNoiseTexture(spec);
+  if (spec.type === "image") tex = await loadImageTexture(spec, maxSize);
+  else if (spec.type === "noise") tex = generateNoiseTexture(spec, maxSize);
+  else if (spec.type === "grid") tex = generateGridTexture(spec, maxSize);
+  else tex = generateLayeredNoiseTexture(spec, maxSize);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = quality.anisotropy;
   return tex;
 }
 
 // Normal maps are linear data, not colour — they must NOT be sRGB-decoded by
 // the GPU or the lighting will be wrong. Generate synchronously since we only
 // support noise-based normals.
-export function loadNormalMapFromSpec(spec: NormalMapSpec): THREE.Texture {
-  const tex = generateNormalMapTexture(spec);
+// Callers must check `quality.maxNormalMapSize` first — on the lowest tier it
+// is null, meaning normal mapping is off and this should not be called at all.
+export function loadNormalMapFromSpec(
+  spec: NormalMapSpec,
+  quality: RenderQuality = getRenderQuality()
+): THREE.Texture {
+  const tex = generateNormalMapTexture(spec, quality.maxNormalMapSize ?? DEFAULT_NOISE_SIZE);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.NoColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = quality.anisotropy;
   return tex;
 }
 
-async function loadImageTexture(spec: ImageTextureSpec): Promise<THREE.Texture> {
+async function loadImageTexture(spec: ImageTextureSpec, maxSize: number): Promise<THREE.Texture> {
   const isSvg = spec.url.toLowerCase().endsWith(".svg");
   if (!isSvg) {
     return new Promise((resolve, reject) => {
@@ -60,7 +73,7 @@ async function loadImageTexture(spec: ImageTextureSpec): Promise<THREE.Texture> 
     });
   }
   // SVGs aren't supported by TextureLoader directly; rasterise via canvas.
-  const size = spec.size ?? DEFAULT_SVG_SIZE;
+  const size = capTextureSize(spec.size ?? DEFAULT_SVG_SIZE, maxSize);
   const img = await loadHtmlImage(spec.url);
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -81,8 +94,8 @@ function loadHtmlImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function generateNoiseTexture(spec: NoiseTextureSpec): THREE.Texture {
-  const size = spec.size ?? DEFAULT_NOISE_SIZE;
+function generateNoiseTexture(spec: NoiseTextureSpec, maxSize: number): THREE.Texture {
+  const size = capTextureSize(spec.size ?? DEFAULT_NOISE_SIZE, maxSize);
   const scale = spec.scale ?? DEFAULT_NOISE_SCALE;
   const seed = spec.seed ?? 1;
   const colors = spec.colors ?? ["#000000", "#ffffff"];
@@ -115,8 +128,8 @@ function generateNoiseTexture(spec: NoiseTextureSpec): THREE.Texture {
   return new THREE.CanvasTexture(canvas);
 }
 
-function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec): THREE.Texture {
-  const size = spec.size ?? DEFAULT_NOISE_SIZE;
+function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec, maxSize: number): THREE.Texture {
+  const size = capTextureSize(spec.size ?? DEFAULT_NOISE_SIZE, maxSize);
   const base = hexToRgb(spec.baseColor);
 
   const canvas = document.createElement("canvas");
@@ -167,12 +180,15 @@ function generateLayeredNoiseTexture(spec: LayeredNoiseTextureSpec): THREE.Textu
   return new THREE.CanvasTexture(canvas);
 }
 
-function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
-  const size = spec.size ?? 512;
+function generateGridTexture(spec: GridTextureSpec, maxSize: number): THREE.Texture {
+  const requested = spec.size ?? 512;
+  const size = capTextureSize(requested, maxSize);
   const cells = Math.max(1, spec.cells ?? 4);
   const cellsX = Math.max(0, spec.cellsX ?? cells);
   const cellsY = Math.max(0, spec.cellsY ?? cells);
-  const lineWidth = spec.lineWidth ?? 2;
+  // lineWidth is authored in px against the requested resolution; scale it so a
+  // downsized texture keeps the same relative seam thickness, never below 1px.
+  const lineWidth = Math.max(1, Math.round((spec.lineWidth ?? 2) * (size / requested)));
   const base = hexToRgb(spec.baseColor);
 
   const canvas = document.createElement("canvas");
@@ -224,11 +240,14 @@ function generateGridTexture(spec: GridTextureSpec): THREE.Texture {
   return new THREE.CanvasTexture(canvas);
 }
 
-function generateNormalMapTexture(spec: NormalNoiseTextureSpec): THREE.Texture {
-  const size = spec.size ?? DEFAULT_NOISE_SIZE;
+function generateNormalMapTexture(spec: NormalNoiseTextureSpec, maxSize: number): THREE.Texture {
+  const requested = spec.size ?? DEFAULT_NOISE_SIZE;
+  const size = capTextureSize(requested, maxSize);
   const scale = spec.scale ?? DEFAULT_NOISE_SCALE;
   const seed = spec.seed ?? 1;
-  const strength = spec.strength ?? 2;
+  // The Sobel step is one texel, so a downsized map walks further through the
+  // noise field per step and would read as bumpier for the same `strength`.
+  const strength = (spec.strength ?? 2) * (size / requested);
 
   const sample = makeSampler(spec.algorithm, seed, scale);
 
